@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { authorizeOwner } = require('../src/security/owner');
 
-const OWNER = '2347065702702';
+const OWNER = '2340000000001';
 const sep = { ownerPhone: OWNER, accountMode: 'separate', ownerLid: '999@lid' };
 const self = { ownerPhone: OWNER, accountMode: 'self' };
 const dm = (o) => ({ isGroup: false, fromMe: false, chat: `${OWNER}@s.whatsapp.net`, from: OWNER, ...o });

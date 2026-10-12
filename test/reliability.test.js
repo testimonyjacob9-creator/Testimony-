@@ -96,7 +96,7 @@ test('storage unavailable: owner is told it was NOT done; handler never rejects 
   const s = setup(); await s.provider.connect();
   s.db.close();
   const before = s.provider.sent.length;
-  await s.provider.simulateInbound({ from: '2347065702702', chat: '2347065702702@s.whatsapp.net', text: 'remind me to x at 4pm', timestamp: s.clock.t.getTime() });
+  await s.provider.simulateInbound({ from: '2340000000001', chat: '2340000000001@s.whatsapp.net', text: 'remind me to x at 4pm', timestamp: s.clock.t.getTime() });
   assert.equal(s.provider.sent.length - before, 1);
   assert.match(s.provider.sent[before].text, /NOT completed/);
 });

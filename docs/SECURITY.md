@@ -6,8 +6,8 @@
 - Logs redact message text, captions, tokens. Audit log records actions, not conversations.
 - Media stored under `DATA_DIR/media` (mode 0700), never served publicly.
 
-## Connecting a number (Phase 2)
-Use a secondary number first. Link via pairing code from WhatsApp > Linked devices. Keep the auth directory private and backed up securely.
+## Connecting a number
+See docs/ACCOUNT_SETUP.md. The pairing code is printed to the terminal only. `data/auth_state/` is created 0700 (files 0600), is git-ignored, and holds the session: whoever has it controls the account. The library's own logging is disabled so credentials and message content cannot reach logs.
 
 ## Disconnecting
 WhatsApp > Linked devices > select the session > Log out, then delete the local auth directory.

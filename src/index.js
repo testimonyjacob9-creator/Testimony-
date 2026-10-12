@@ -15,7 +15,7 @@ async function main() {
   fs.mkdirSync(config.mediaDir, { recursive: true, mode: 0o700 });
 
   const db = openDatabase(config.dbPath);
-  const provider = createProvider(config);
+  const provider = createProvider(config, logger);
   const assistant = new Assistant({ db, provider, config, logger });
   const scheduler = new Scheduler({ ctx: assistant.ctx });
   assistant.start();

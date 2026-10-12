@@ -25,7 +25,9 @@ class WhatsAppProvider {
 /**
  * @typedef {Object} InboundMessage
  * @property {string} id
- * @property {string} from        sender JID/number
+ * @property {string|null} from  sender phone digits when known
+ * @property {string|null} [fromLid] sender LID when the phone is not exposed
+ * @property {boolean} [chatIsSelf] chat is the account's own "message yourself" chat
  * @property {string} chat        chat JID
  * @property {boolean} isGroup
  * @property {boolean} fromMe

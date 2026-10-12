@@ -33,10 +33,10 @@ test('recoverRunning requeues crashed tasks', () => {
   assert.equal(s.get(id).status, 'scheduled');
 });
 test('config: baileys requires explicit account mode; self/separate rules', () => {
-  const base = { OWNER_PHONE: '+2347065702702', DATA_DIR: '/tmp/x' };
-  assert.equal(loadConfig(base).ownerPhone, '2347065702702');
+  const base = { OWNER_PHONE: '+2340000000001', DATA_DIR: '/tmp/x' };
+  assert.equal(loadConfig(base).ownerPhone, '2340000000001');
   assert.throws(() => loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys' }), /ACCOUNT_MODE/);
-  assert.equal(loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys', ACCOUNT_MODE: 'self' }).botPhone, '2347065702702');
+  assert.equal(loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys', ACCOUNT_MODE: 'self' }).botPhone, '2340000000001');
   assert.throws(() => loadConfig({ ...base, WHATSAPP_PROVIDER: 'baileys', ACCOUNT_MODE: 'separate' }), /BOT_PHONE/);
-  assert.throws(() => loadConfig({ ...base, ACCOUNT_MODE: 'separate', BOT_PHONE: '2347065702702' }), /differ/);
+  assert.throws(() => loadConfig({ ...base, ACCOUNT_MODE: 'separate', BOT_PHONE: '2340000000001' }), /differ/);
 });

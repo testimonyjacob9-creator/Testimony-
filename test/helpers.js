@@ -5,7 +5,7 @@ const { Assistant } = require('../src/assistant');
 const { Scheduler } = require('../src/scheduler');
 const { loadConfig } = require('../src/config');
 
-const OWNER = '2347065702702';
+const OWNER = '2340000000001';
 let n = 0;
 
 function setup({ db, mode = 'separate', start = '2026-10-12T10:00:00Z', provider } = {}) {

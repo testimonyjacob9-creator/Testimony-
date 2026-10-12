@@ -11,6 +11,7 @@
     "dev:chat": "node scripts/dev-chat.js"
   },
   "dependencies": {
+    "baileys": "6.7.24",
     "dotenv": "^16.4.5",
     "pino": "^9.0.0"
   },

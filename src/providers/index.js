@@ -1,10 +1,11 @@
 'use strict';
 const { MockProvider } = require('./mock');
 
-function createProvider(config) {
+function createProvider(config, logger) {
   if (config.provider === 'mock') return new MockProvider();
   if (config.provider === 'baileys') {
-    throw new Error('The Baileys provider is added in Phase 2. Use WHATSAPP_PROVIDER=mock for now.');
+    const { BaileysProvider } = require('./baileys');
+    return new BaileysProvider({ config, logger });
   }
   throw new Error(`Unknown provider: ${config.provider}`);
 }

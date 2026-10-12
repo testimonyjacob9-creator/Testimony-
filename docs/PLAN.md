@@ -6,11 +6,12 @@ Status legend: [x] done, [ ] todo
 - [x] Repo, config validation, redacting logger, SQLite + migrations, audit log
 - [x] Provider interface + mock provider, graceful shutdown, tests
 
-## Phase 2 - WhatsApp connection and owner chat [ ]
-- [ ] Baileys provider (pairing-code login, persistent auth state outside git, reconnect with backoff)
-- [ ] Owner authentication (OWNER_PHONE, 1:1 chat only, groups ignored, self-chat mode)
-- [ ] Command router: /help /status /tasks /cancel /properties /schedule /settings /pause /resume
-- [ ] Pending-action store (proposed vs completed), confirm/cancel/modify flow
+## Phase 2 - WhatsApp connection and owner chat [x] code + tests, [ ] live verification
+- [x] Baileys provider (pairing code, auth state outside git, reconnect with backoff, account verification) - fake-socket tests
+- [x] Owner authentication (1:1 only, groups ignored, self/separate modes)
+- [x] Commands /help /status /tasks /cancel /pause /resume
+- [x] Pending-action store, confirm/cancel/modify, persistent scheduler
+- [ ] Supervised live connection by the owner
 
 ## Phase 3 - Properties [ ]
 Intake from text/media, structured records with PROP-### IDs, edit/search/mark sold, caption variants.
@@ -31,4 +32,4 @@ Persistent jobs in SQLite, Africa/Lagos, daily plan, briefings, recurring pre-au
 Failure-scenario tests, backup/restore, optional dashboard, deployment guide.
 
 ## Next exact step
-Phase 2: add `baileys` dependency, implement `src/providers/baileys.js` against `WhatsAppProvider`, add `src/security/owner.js` with tests for impersonation/group/unauthorized senders.
+Owner chooses ACCOUNT_MODE and runs the first supervised live connection; then Phase 3 (properties). See docs/HANDOVER.md.
