@@ -35,4 +35,6 @@ const actions = {
   },
 };
 
+Object.assign(actions, require('./registry-groups').groupActions);
+
 module.exports = { actions };

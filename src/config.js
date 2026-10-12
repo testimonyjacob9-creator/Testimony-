@@ -32,6 +32,13 @@ function loadConfig(env = process.env) {
   const ttl = Number(env.PROPOSAL_TTL_MINUTES || 30);
   if (!Number.isFinite(ttl) || ttl < 1 || ttl > 1440) errors.push('PROPOSAL_TTL_MINUTES must be 1-1440');
 
+  const delaySec = Number(env.GROUP_SEND_DELAY_SECONDS ?? 30);
+  if (!Number.isFinite(delaySec) || delaySec < 0 || delaySec > 600) errors.push('GROUP_SEND_DELAY_SECONDS must be 0-600');
+  const maxGroups = Number(env.MAX_GROUPS_PER_CAMPAIGN || 10);
+  if (!Number.isInteger(maxGroups) || maxGroups < 1 || maxGroups > 50) errors.push('MAX_GROUPS_PER_CAMPAIGN must be an integer 1-50');
+  const dedupeHours = Number(env.GROUP_DEDUPE_HOURS || 24);
+  if (!Number.isFinite(dedupeHours) || dedupeHours < 0 || dedupeHours > 720) errors.push('GROUP_DEDUPE_HOURS must be 0-720');
+
   const timezone = env.TIMEZONE || 'Africa/Lagos';
   if (!validTimezone(timezone)) errors.push(`TIMEZONE "${timezone}" is not a valid IANA timezone`);
 
@@ -52,6 +59,7 @@ function loadConfig(env = process.env) {
   return Object.freeze({
     ownerPhone, provider, timezone, accountMode, botPhone, ownerLid,
     proposalTtlMs: Math.floor(ttl * 60 * 1000),
+    groupSendDelayMs: Math.floor(delaySec * 1000), maxGroupsPerCampaign: maxGroups, groupDedupeMs: Math.floor(dedupeHours * 3600 * 1000),
     logLevel: env.LOG_LEVEL || 'info',
     dataDir,
     authDir: path.join(dataDir, 'auth_state'),

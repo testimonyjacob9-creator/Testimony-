@@ -9,6 +9,9 @@ class MockProvider extends WhatsAppProvider {
     this.sent = [];
     this.statuses = [];
     this.failNext = null;
+    this.groups = [];
+    this.failJids = new Set();
+    this.listError = null;
     this._handler = null;
     this._stateHandler = () => {};
   }
@@ -23,8 +26,10 @@ class MockProvider extends WhatsAppProvider {
     if (this.failNext) { const error = this.failNext; this.failNext = null; return { ok: false, verified: false, error }; }
     return null;
   }
+  setGroups(list) { this.groups = list; }
   async sendText(jid, text) {
     const bad = this._guard(); if (bad) return bad;
+    if (this.failJids.has(jid)) return { ok: false, verified: false, error: 'simulated send failure' };
     const id = `mock-${this.sent.length + 1}`;
     this.sent.push({ id, jid, text });
     return { ok: true, id, verified: true };
@@ -41,7 +46,11 @@ class MockProvider extends WhatsAppProvider {
     this.statuses.push({ id, content });
     return { ok: true, id, verified: false }; // mock cannot truly verify, mirrors real limits
   }
-  async listGroups() { return []; }
+  async listGroups() {
+    if (this.state !== 'connected') return { ok: false, groups: [], error: 'not connected' };
+    if (this.listError) return { ok: false, groups: [], error: this.listError };
+    return { ok: true, groups: this.groups.map((g) => ({ size: null, canSend: true, isMember: true, ...g })) };
+  }
   capabilities() {
     return { sendText: true, sendMedia: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
   }

@@ -37,6 +37,47 @@ const MIGRATIONS = [
       );
       CREATE INDEX idx_tasks_due ON tasks(status, run_at);`,
   },
+  {
+    version: 3,
+    sql: `
+      -- Discovery cache: what the account could see. NOT an authorization list.
+      CREATE TABLE groups (
+        jid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        size INTEGER,
+        can_send INTEGER,
+        accessible INTEGER NOT NULL DEFAULT 1,
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL
+      );
+      -- Marketing allowlist: only explicit owner approval puts a group here.
+      CREATE TABLE marketing_groups (
+        jid TEXT PRIMARY KEY,
+        name_at_approval TEXT NOT NULL,
+        approved_at TEXT NOT NULL
+      );
+      CREATE TABLE campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('sending','done','cancelled')),
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      CREATE TABLE campaign_sends (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
+        group_jid TEXT NOT NULL,
+        group_name TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','sending','sent','failed','skipped','unknown','cancelled')),
+        detail TEXT,
+        message_id TEXT,
+        attempted_at TEXT,
+        UNIQUE (campaign_id, group_jid)
+      );
+      CREATE INDEX idx_sends_pending ON campaign_sends(status, campaign_id);`,
+  },
 ];
 
 function openDatabase(dbPath) {

@@ -14,6 +14,10 @@ class WhatsAppProvider {
   async sendText(jid, text) { throw new Error('not implemented'); }
   async sendMedia(jid, media) { throw new Error('not implemented'); }
   async publishStatus(content) { throw new Error('not implemented'); }
+  /**
+   * @returns {Promise<{ok:boolean, groups:{id:string,name:string,size:number|null,canSend:boolean|null,isMember:boolean}[], error?:string}>}
+   * Must never fabricate groups: on failure return ok:false with an empty list.
+   */
   async listGroups() { throw new Error('not implemented'); }
   connectionState() { return 'disconnected'; }
   /** What this provider genuinely supports; callers must check before offering a feature. */

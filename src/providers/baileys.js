@@ -82,7 +82,7 @@ class BaileysProvider extends WhatsAppProvider {
   onConnectionChange(h) { this._stateHandler = h; }
   connectionState() { return this.state; }
   capabilities() {
-    return { sendText: true, sendMedia: false, publishStatus: false, statusVerification: false, groups: false, receiveMedia: false };
+    return { sendText: true, sendMedia: false, publishStatus: false, statusVerification: false, groups: true, receiveMedia: false };
   }
   _set(s) { if (this.state !== s) { this.state = s; try { this._stateHandler(s); } catch (e) { this.logger?.error({ err: e.message }, 'state handler failed'); } } }
 
@@ -200,7 +200,24 @@ class BaileysProvider extends WhatsAppProvider {
   }
   async sendMedia() { return { ok: false, verified: false, error: 'media sending is not implemented yet (Phase 3/4)' }; }
   async publishStatus() { return { ok: false, verified: false, error: 'status publishing is not implemented yet (Phase 4)' }; }
-  async listGroups() { return []; }
+  async listGroups() {
+    if (this.state !== 'connected' || !this.sock) return { ok: false, groups: [], error: 'not connected' };
+    try {
+      const map = await this.sock.groupFetchAllParticipating();
+      const mine = new Set([this.self.jid, this.self.lid].filter(Boolean));
+      const groups = Object.values(map || {}).filter((g) => g && g.id).map((g) => {
+        const parts = Array.isArray(g.participants) ? g.participants : [];
+        const me = parts.find((p) => mine.has(stripDevice(p.id)));
+        const isAdmin = !!me && (me.admin === 'admin' || me.admin === 'superadmin');
+        const adminsOnly = !!(g.announce || g.isCommunityAnnounce);
+        return {
+          id: g.id, name: g.subject || '(unnamed group)', size: Number.isFinite(g.size) ? g.size : (parts.length || null),
+          canSend: adminsOnly ? (me ? isAdmin : null) : true, isMember: true,
+        };
+      });
+      return { ok: true, groups };
+    } catch (e) { return { ok: false, groups: [], error: e.message }; }
+  }
 }
 
 module.exports = { BaileysProvider, normalizeMessage, extractText, jidToPhone, backoffMs, toJid };

@@ -199,3 +199,29 @@ test('END-TO-END (fake socket): owner command in self-chat is answered; a strang
   assert.equal(fake.sent.length, announce + 1);
   assert.match((await a.process('/status')), /Automation: running/);
 });
+
+test('listGroups maps real-shaped Baileys metadata, flags admin-only groups, never fabricates', async () => {
+  const { p, sock } = await open('self', { fake: { userId: `${OWNER}:7@s.whatsapp.net` } });
+  sock.groupFetchAllParticipating = async () => ({
+    '111@g.us': { id: '111@g.us', subject: 'Open Group', size: 12, participants: [{ id: `${OWNER}@s.whatsapp.net` }, { id: '1@s.whatsapp.net' }] },
+    '222@g.us': { id: '222@g.us', subject: 'Admins Only', announce: true, participants: [{ id: `${OWNER}@s.whatsapp.net` }, { id: '2@s.whatsapp.net', admin: 'admin' }] },
+    '333@g.us': { id: '333@g.us', subject: 'I Am Admin', announce: true, participants: [{ id: `${OWNER}:5@s.whatsapp.net`, admin: 'superadmin' }] },
+    '444@g.us': { id: '444@g.us', subject: 'Unknown Role', announce: true, participants: [{ id: '9@s.whatsapp.net', admin: 'admin' }] },
+  });
+  const r = await p.listGroups();
+  const by = Object.fromEntries(r.groups.map((g) => [g.id, g]));
+  assert.equal(r.groups.length, 4);
+  assert.equal(by['111@g.us'].size, 12); assert.equal(by['111@g.us'].canSend, true);
+  assert.equal(by['222@g.us'].canSend, false, 'announce group, account not admin');
+  assert.equal(by['333@g.us'].canSend, true, 'announce group, account is admin');
+  assert.equal(by['444@g.us'].canSend, null, 'cannot tell -> unknown, not guessed');
+  assert.ok(r.groups.every((g) => g.isMember === true));
+});
+
+test('listGroups: failures and disconnected state return ok:false with no groups', async () => {
+  const { p, sock } = await open('self', { openNow: false });
+  assert.deepEqual(await p.listGroups(), { ok: false, groups: [], error: 'not connected' });
+  sock.ev.emit('connection.update', { connection: 'open' }); await tick();
+  sock.groupFetchAllParticipating = async () => { throw new Error('rate-overlimit'); };
+  assert.deepEqual(await p.listGroups(), { ok: false, groups: [], error: 'rate-overlimit' });
+});

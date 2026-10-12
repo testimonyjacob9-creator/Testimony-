@@ -7,6 +7,7 @@ const { openDatabase, audit } = require('./storage/db');
 const { createProvider } = require('./providers');
 const { Assistant } = require('./assistant');
 const { Scheduler } = require('./scheduler');
+const { CampaignRunner } = require('./groups/campaigns');
 
 async function main() {
   let config;
@@ -18,8 +19,10 @@ async function main() {
   const provider = createProvider(config, logger);
   const assistant = new Assistant({ db, provider, config, logger });
   const scheduler = new Scheduler({ ctx: assistant.ctx });
+  const campaigns = new CampaignRunner({ ctx: assistant.ctx });
   assistant.start();
   scheduler.start();
+  campaigns.start();
   await provider.connect();
   audit(db, 'system', 'startup', 'ok');
   logger.info({ provider: config.provider, tz: config.timezone }, 'assistant started (Phase 2)');
@@ -28,7 +31,7 @@ async function main() {
   const shutdown = async (sig) => {
     if (stopping) return; stopping = true;
     logger.info({ sig }, 'shutting down');
-    try { scheduler.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); db.close(); } finally { process.exit(0); }
+    try { scheduler.stop(); campaigns.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); db.close(); } finally { process.exit(0); }
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

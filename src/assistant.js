@@ -7,6 +7,8 @@ const { actions } = require('./tasks/registry');
 const { getPause, setPause, clearPause } = require('./tasks/pause');
 const { getSetting, setSetting, deleteSetting } = require('./storage/settings');
 const { audit } = require('./storage/db');
+const { GroupStore } = require('./groups/store');
+const { CampaignStore } = require('./groups/campaigns');
 
 const PREFIX = '🤖';
 const STALE_MS = 10 * 60 * 1000;
@@ -18,6 +20,8 @@ const HELP = `${PREFIX} *Commands*
 /cancel - discard the current draft (/cancel T-5, /cancel all)
 /pause [for 2 hours | until tomorrow] - pause scheduled automation
 /resume - resume automation
+/groups - list your groups (+ select, selected, remove, clear, enable, disable)
+/advert <text> - draft an advert for your approved groups (needs your yes)
 
 *You can also just type*, e.g.
 "Remind me to call the buyer at 4 PM"
@@ -25,23 +29,26 @@ const HELP = `${PREFIX} *Commands*
 "Don't post anything today"
 
 Every action is drafted first. Nothing runs until you reply *yes*.
-Coming later: properties, status posts, groups, leads.`;
+Coming later: properties, status posts, leads.`;
 
 /** Provider-independent command layer. Depends only on the WhatsAppProvider interface. */
 class Assistant {
   constructor({ db, provider, config, clock = () => new Date(), logger }) {
     this.db = db; this.provider = provider; this.config = config; this.clock = clock; this.logger = logger;
     this.store = new TaskStore(db, clock);
+    this.groups = new GroupStore(db, clock);
+    this.campaigns = new CampaignStore(db, clock);
     this.ownerJid = `${config.ownerPhone}@s.whatsapp.net`;
     this.prefix = PREFIX;
     this.seen = new Set(); this.sentIds = new Set(); this.rejectLog = new Map();
     this.queue = Promise.resolve();
     this.startedAt = clock(); this.announced = false; this.restored = 0;
   }
-  get ctx() { return { db: this.db, store: this.store, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
+  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
 
   start() {
     this.restored = this.store.recoverRunning();
+    this.interrupted = this.campaigns.recoverInterrupted();
     // Never let a handler failure escape into the provider's event loop.
     this.provider.onMessage((m) => this.handleInbound(m).catch((e) => this.logger?.error({ err: e.message }, 'inbound handler failed')));
     this.provider.onConnectionChange((s) => this.onConnectionChange(s));
@@ -53,7 +60,8 @@ class Assistant {
       this.announced = true;
       const open = this.store.listOpen().length;
       const p = getPause(this.db, this.clock());
-      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}. Send /help.`;
+      const warn = this.interrupted ? ` WARNING: ${this.interrupted} group send(s) were interrupted by the restart and their outcome is unknown (see /advert status).` : '';
+      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}.${warn} Send /help.`;
       this._send(this.ownerJid, text).catch(() => {});
     }
   }
@@ -128,6 +136,13 @@ class Assistant {
       case 'deny': return this.deny(proposal, awaiting);
       case 'reminder_slots': return this.reminderSlots(it, now);
       case 'modify_time': return this.modifyTime(it, proposal, now);
+      case 'groups_show': return it.which === 'selected' ? this.groupsSelected(1) : this.groupsList(1);
+      case 'groups_page': return this.groupsPage();
+      case 'groups_select': return this.proposeSelect(it.numbers);
+      case 'groups_remove': return this.proposeRemove(it);
+      case 'advert': return this.proposeAdvert(it);
+      case 'campaign_retarget': return this.retargetCampaign(it, proposal);
+      case 'campaign_stop': return this.stopCampaign(proposal);
       case 'pause': return this.pause(it.until, now);
       case 'resume': return this.resume();
       case 'cancel': return this.cancel(it, proposal, now);
@@ -136,7 +151,13 @@ class Assistant {
       case 'help': return HELP;
       case 'unsupported': return `I can't do that yet: ${it.feature} arrives in Phase ${it.phase}. Nothing was posted or sent. Right now I handle reminders, /tasks, /pause and /resume.`;
       case 'empty': return HELP;
-      default: return `I didn't understand that, so I did nothing. Try "Remind me to ... at 4 PM", /tasks, or /help.`;
+      default: {
+        if (text.length >= 40) {
+          setSetting(this.db, 'candidate_content', { text, at: now.toISOString() });
+          return `I didn't recognise that as a command, so I did nothing. I kept it for 30 min in case it is an advert: say "send this to my approved groups" and I'll prepare a draft (nothing is sent without your confirmation).`;
+        }
+        return `I didn't understand that, so I did nothing. Try "Remind me to ... at 4 PM", /tasks, or /help.`;
+      }
     }
   }
 
@@ -148,6 +169,8 @@ class Assistant {
       case 'cancel': return this.cancel({ id: (args.match(/(\d+)/) || [])[1] ? Number(args.match(/(\d+)/)[1]) : null, all: /^all\b/i.test(args) }, this.store.activeProposal(), now);
       case 'pause': return this.pause(require('./nlp/intent').parsePauseUntil(args, now, this.config.timezone), now);
       case 'resume': return this.resume();
+      case 'groups': return this.groupsCommand(args);
+      case 'advert': return this.advertCommand(args);
       case 'properties': return 'Property management arrives in Phase 3. Nothing is stored yet.';
       case 'schedule': return 'Daily schedules arrive in Phase 7. Reminders you set now are already persistent: see /tasks.';
       case 'settings': return 'Settings arrive in a later phase. Current: timezone ' + this.config.timezone + '.';
@@ -268,8 +291,11 @@ Scheduled tasks: ${c.scheduled || 0}
 Failed tasks: ${c.failed || 0}
 Time: ${this._fmt(now)} (${this.config.timezone})
 Uptime: ${Math.floor(up / 60)}h ${up % 60}m
-Not built yet: properties, status posting, groups, leads`;
+Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.approved().length} approved group(s))
+Not built yet: properties, status posting, leads`;
   }
 }
+
+Object.assign(Assistant.prototype, require('./groups/commands'));
 
 module.exports = { Assistant, PREFIX };

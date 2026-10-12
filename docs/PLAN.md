@@ -19,8 +19,11 @@ Intake from text/media, structured records with PROP-### IDs, edit/search/mark s
 ## Phase 4 - Status publishing [ ]
 Preview/confirm, dedupe, history, honest `verified` reporting. Blocks sold properties.
 
-## Phase 5 - Group campaigns [ ]
-Allowlist, templates, per-group dedupe, preview + approval, rate limits.
+## Phase 5 - Group campaigns [~] partially done
+- [x] Discovery, pagination, allowlist (stable JIDs), enable switch, confirmed adverts, pacing, dedupe, partial-failure reporting, restart safety (docs/GROUPS.md)
+- [ ] Property-linked adverts, media adverts, per-group templates (need Phase 3)
+- [ ] Scheduled group adverts (Phase 7)
+- Channels: intentionally disabled (docs/DESTINATIONS.md)
 
 ## Phase 6 - Leads/CRM [ ]
 Leads, stages, follow-ups, drafted replies (never auto-sent).

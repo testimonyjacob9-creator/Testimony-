@@ -10,13 +10,39 @@ const TASKS = /\b(tasks?|to-?dos?|pending|scheduled|reminders?|awaiting|approval
 const TASKS_VERB = /\b(show|list|what|which|view|see|any|my|everything|display)\b/i;
 const STATUS = /\b(are you (online|connected|working|alive|there)|bot status|your status|connection status|how are you doing)\b/i;
 const HELP = /^\s*(help|menu|what can you do\??|commands)\s*[?!.]*$/i;
+const G_SELECT = /\b(select|choose|approve|authori[sz]e)\b.*\bgroups?\b/i;
+const G_REMOVE = /\b(remove|deselect|unselect|drop|delete)\b.*\bgroups?\b/i;
+const G_SHOW_SEL = /\b(show|list|see|view|display)\b.*\b(approved|selected|marketing)\b.*\bgroups?\b|\b(approved|selected|marketing) groups\b/i;
+const G_SHOW = /\b(show|list|see|view|display)\b.*\bgroups\b/i;
+const G_NEXT = /\b(next page|more groups)\b/i;
+const ADVERT = /\b(send|post|share|broadcast|promote)\b.*\b(advert(isement)?|ad|listing|promo(tion)?|message|this)\b.*\b(to|in|on)\b.*\bgroups?\b/i;
+const C_ONLY = /\bonly\b.*\bgroups?\b/i;
+const C_ADD = /\b(add|include)\b.*\bgroups?\b/i;
+const C_REMOVE = /\b(remove|exclude|skip|drop)\b.*\bgroups?\b/i;
+const C_STOP = /\b(stop|cancel|abort)\b.*\b(campaign|advert(isement)?|sending|group posts?)\b/i;
 const UNSUPPORTED = [
   [/\b(propert(y|ies)|listing|caption|house|land|apartment)\b/i, 'Property management', 3],
   [/\b(status|story|post)\b/i, 'Status posting', 4],
-  [/\b(group|groups|advert|campaign)\b/i, 'Group campaigns', 5],
+  
   [/\b(buyer|seller|lead|client|follow ?up)\b/i, 'Lead management', 6],
 ];
 const UNIT = { m: 60000, h: 3600000, d: 86400000 };
+
+/** "1, 3 and 5", "2-4", "#2" -> [1,3,5] etc. */
+function extractNumbers(str) {
+  const out = new Set();
+  const range = /(\d{1,3})\s*(?:-|to)\s*(\d{1,3})/g;
+  for (const m of str.matchAll(range)) { const a = +m[1]; const b = +m[2]; if (a <= b && b - a < 50) for (let i = a; i <= b; i++) out.add(i); }
+  for (const m of str.replace(range, ' ').matchAll(/\b\d{1,3}\b/g)) out.add(+m[0]);
+  return [...out].filter((n) => n > 0).sort((a, b) => a - b);
+}
+function nameQuery(raw) {
+  return raw.replace(/\b(please|remove|deselect|unselect|drop|delete|the|my|group|groups|from|approved|marketing|list|selected|exclude|skip)\b/gi, ' ').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function splitAdvert(raw) {
+  const idx = raw.search(/[:\n]/);
+  return { head: idx >= 0 ? raw.slice(0, idx) : raw, text: idx >= 0 ? raw.slice(idx + 1).trim() : '' };
+}
 
 function parsePauseUntil(text, now, tz) {
   const t = text.toLowerCase();
@@ -54,6 +80,18 @@ function interpret(text, st) {
   if (DENY.test(raw)) return { intent: 'deny' };
   const rm = raw.match(/\bremind me\b\s*(?:to\s+|about\s+|that\s+)?([\s\S]*)$/i);
   if (rm) return reminderSlots(rm[1], st, null);
+  if (st.proposalKind === 'campaign' && !splitAdvert(raw).text) {
+    if (C_ONLY.test(raw)) return { intent: 'campaign_retarget', mode: 'only', numbers: extractNumbers(raw) };
+    if (C_ADD.test(raw)) return { intent: 'campaign_retarget', mode: 'add', numbers: extractNumbers(raw) };
+    if (C_REMOVE.test(raw)) return { intent: 'campaign_retarget', mode: 'remove', numbers: extractNumbers(raw) };
+  }
+  if (C_STOP.test(raw)) return { intent: 'campaign_stop' };
+  if (ADVERT.test(raw)) { const { head, text } = splitAdvert(raw); return { intent: 'advert', text, numbers: extractNumbers(head) }; }
+  if (G_NEXT.test(raw)) return { intent: 'groups_page', delta: 1 };
+  if (G_SELECT.test(raw)) return { intent: 'groups_select', numbers: extractNumbers(raw) };
+  if (G_REMOVE.test(raw)) return { intent: 'groups_remove', numbers: extractNumbers(raw), name: nameQuery(raw) };
+  if (G_SHOW_SEL.test(raw)) return { intent: 'groups_show', which: 'selected' };
+  if (G_SHOW.test(raw)) return { intent: 'groups_show', which: 'discovery' };
   if (RESUME.test(raw)) return { intent: 'resume' };
   if (PAUSE.test(raw)) return { intent: 'pause', until: parsePauseUntil(raw, st.now, st.tz) };
   if (CANCEL.test(raw)) {
@@ -72,8 +110,12 @@ function interpret(text, st) {
     if (w && w.error) return { intent: 'modify_time', problem: 'past' };
     if (w) return { intent: 'modify_time', when: w };
   }
-  for (const [re, feature, phase] of UNSUPPORTED) if (re.test(raw)) return { intent: 'unsupported', feature, phase };
+  // Long free text that is not phrased as an instruction is content (e.g. an advert), not a feature request.
+  const looksLikeInstruction = /^\s*(please\s+)?(post|send|publish|share|schedule|promote|add|create|show)\b/i.test(raw);
+  if (raw.length < 40 || looksLikeInstruction) {
+    for (const [re, feature, phase] of UNSUPPORTED) if (re.test(raw)) return { intent: 'unsupported', feature, phase };
+  }
   return { intent: 'unknown' };
 }
 
-module.exports = { interpret, parsePauseUntil };
+module.exports = { interpret, parsePauseUntil, extractNumbers };
