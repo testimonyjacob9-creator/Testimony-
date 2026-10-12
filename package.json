@@ -1,0 +1,19 @@
+{
+  "name": "testimony-business-assistant",
+  "version": "0.1.0",
+  "description": "Owner-controlled WhatsApp business assistant: properties, status, groups, leads, scheduling",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pino": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
