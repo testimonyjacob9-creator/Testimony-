@@ -18,6 +18,25 @@ const MIGRATIONS = [
         detail TEXT
       );`,
   },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        payload TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL CHECK (status IN ('proposed','scheduled','running','done','failed','cancelled','expired')),
+        run_at TEXT,
+        expires_at TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        result TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_tasks_due ON tasks(status, run_at);`,
+  },
 ];
 
 function openDatabase(dbPath) {
