@@ -7,7 +7,8 @@
   "private": true,
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "dev:chat": "node scripts/dev-chat.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
