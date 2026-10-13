@@ -9,6 +9,7 @@ const { getSetting, setSetting, deleteSetting } = require('./storage/settings');
 const { audit } = require('./storage/db');
 const { GroupStore } = require('./groups/store');
 const { CampaignStore } = require('./groups/campaigns');
+const { AudienceStore } = require('./status/audience');
 
 const PREFIX = '🤖';
 const STALE_MS = 10 * 60 * 1000;
@@ -21,6 +22,7 @@ const HELP = `${PREFIX} *Commands*
 /pause [for 2 hours | until tomorrow] - pause scheduled automation
 /resume - resume automation
 /groups - list your groups (+ select, selected, remove, clear, enable, disable)
+/audience - who can receive your Status posts
 /advert <text> - draft an advert for your approved groups (needs your yes)
 
 *You can also just type*, e.g.
@@ -38,13 +40,14 @@ class Assistant {
     this.store = new TaskStore(db, clock);
     this.groups = new GroupStore(db, clock);
     this.campaigns = new CampaignStore(db, clock);
+    this.audience = new AudienceStore(db, clock);
     this.ownerJid = `${config.ownerPhone}@s.whatsapp.net`;
     this.prefix = PREFIX;
     this.seen = new Set(); this.sentIds = new Set(); this.rejectLog = new Map();
     this.queue = Promise.resolve();
     this.startedAt = clock(); this.announced = false; this.restored = 0;
   }
-  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
+  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, audience: this.audience, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
 
   start() {
     this.restored = this.store.recoverRunning();
@@ -52,6 +55,7 @@ class Assistant {
     // Never let a handler failure escape into the provider's event loop.
     this.provider.onMessage((m) => this.handleInbound(m).catch((e) => this.logger?.error({ err: e.message }, 'inbound handler failed')));
     this.provider.onConnectionChange((s) => this.onConnectionChange(s));
+    this.provider.onContacts((list) => { try { this.audience.ingest(list, 'sync'); } catch (e) { this.logger?.error({ err: e.message }, 'contact ingest failed'); } });
   }
 
   onConnectionChange(state) {
@@ -169,6 +173,7 @@ class Assistant {
       case 'cancel': return this.cancel({ id: (args.match(/(\d+)/) || [])[1] ? Number(args.match(/(\d+)/)[1]) : null, all: /^all\b/i.test(args) }, this.store.activeProposal(), now);
       case 'pause': return this.pause(require('./nlp/intent').parsePauseUntil(args, now, this.config.timezone), now);
       case 'resume': return this.resume();
+      case 'audience': return this.audienceCommand(args);
       case 'groups': return this.groupsCommand(args);
       case 'advert': return this.advertCommand(args);
       case 'properties': return 'Property management arrives in Phase 3. Nothing is stored yet.';
@@ -297,5 +302,6 @@ Not built yet: properties, status posting, leads`;
 }
 
 Object.assign(Assistant.prototype, require('./groups/commands'));
+Object.assign(Assistant.prototype, require('./status/commands'));
 
 module.exports = { Assistant, PREFIX };

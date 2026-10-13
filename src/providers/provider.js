@@ -19,6 +19,10 @@ class WhatsAppProvider {
    * Must never fabricate groups: on failure return ok:false with an empty list.
    */
   async listGroups() { throw new Error('not implemented'); }
+  /** @param {(contacts:{id:string,jid?:string,lid?:string,name?:string,notify?:string}[])=>void} handler */
+  onContacts(handler) { /* optional: providers that can learn contacts call handler */ }
+  /** @returns {Promise<{ok:boolean, mode?:string, error?:string}>} the Status privacy MODE WhatsApp reports (not the exception lists) */
+  async getStatusPrivacy() { return { ok: false, error: 'not supported' }; }
   connectionState() { return 'disconnected'; }
   /** What this provider genuinely supports; callers must check before offering a feature. */
   capabilities() {

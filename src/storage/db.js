@@ -78,6 +78,21 @@ const MIGRATIONS = [
       );
       CREATE INDEX idx_sends_pending ON campaign_sends(status, campaign_id);`,
   },
+  {
+    version: 4,
+    sql: `
+      -- Status audience candidates, learned ONLY from real provider events or manual entry.
+      CREATE TABLE contacts (
+        jid TEXT PRIMARY KEY,
+        name TEXT,
+        source TEXT NOT NULL CHECK (source IN ('sync','manual')),
+        excluded INTEGER NOT NULL DEFAULT 0,
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL
+      );
+      -- Contacts WhatsApp identifies only by an anonymous ID: cannot be targeted, counted for honesty.
+      CREATE TABLE contacts_lid_only (lid TEXT PRIMARY KEY, last_seen TEXT NOT NULL);`,
+  },
 ];
 
 function openDatabase(dbPath) {

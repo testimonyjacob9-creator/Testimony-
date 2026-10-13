@@ -19,6 +19,7 @@ const ADVERT = /\b(send|post|share|broadcast|promote)\b.*\b(advert(isement)?|ad|
 const C_ONLY = /\bonly\b.*\bgroups?\b/i;
 const C_ADD = /\b(add|include)\b.*\bgroups?\b/i;
 const C_REMOVE = /\b(remove|exclude|skip|drop)\b.*\bgroups?\b/i;
+const AUDIENCE = /\b(status audience|who (can|will) see my status|status recipients)\b/i;
 const C_STOP = /\b(stop|cancel|abort)\b.*\b(campaign|advert(isement)?|sending|group posts?)\b/i;
 const UNSUPPORTED = [
   [/\b(propert(y|ies)|listing|caption|house|land|apartment)\b/i, 'Property management', 3],
@@ -85,6 +86,7 @@ function interpret(text, st) {
     if (C_ADD.test(raw)) return { intent: 'campaign_retarget', mode: 'add', numbers: extractNumbers(raw) };
     if (C_REMOVE.test(raw)) return { intent: 'campaign_retarget', mode: 'remove', numbers: extractNumbers(raw) };
   }
+  if (AUDIENCE.test(raw)) return { intent: 'command', name: 'audience', args: '' };
   if (C_STOP.test(raw)) return { intent: 'campaign_stop' };
   if (ADVERT.test(raw)) { const { head, text } = splitAdvert(raw); return { intent: 'advert', text, numbers: extractNumbers(head) }; }
   if (G_NEXT.test(raw)) return { intent: 'groups_page', delta: 1 };

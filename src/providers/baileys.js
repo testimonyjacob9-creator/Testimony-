@@ -75,11 +75,12 @@ class BaileysProvider extends WhatsAppProvider {
     this.timers = timers || { setTimeout: (...a) => setTimeout(...a), clearTimeout: (...a) => clearTimeout(...a) };
     this.state = 'disconnected'; this.sock = null; this.attempt = 0; this.closing = false;
     this.pairingRequested = false; this.reconnectTimer = null; this.self = {};
-    this._handler = null; this._stateHandler = () => {};
+    this._handler = null; this._stateHandler = () => {}; this._contactsHandler = () => {};
   }
 
   onMessage(h) { this._handler = h; }
   onConnectionChange(h) { this._stateHandler = h; }
+  onContacts(h) { this._contactsHandler = h; }
   connectionState() { return this.state; }
   capabilities() {
     return { sendText: true, sendMedia: false, publishStatus: false, statusVerification: false, groups: true, receiveMedia: false };
@@ -126,6 +127,11 @@ class BaileysProvider extends WhatsAppProvider {
     sock.ev.on('creds.update', async () => { try { await saveCreds(); this._hardenAuthDir(); } catch (e) { this.logger?.error({ err: e.message }, 'saving credentials failed'); } });
     sock.ev.on('connection.update', (u) => this._onConnectionUpdate(sock, state, u));
     sock.ev.on('messages.upsert', (ev) => this._onUpsert(ev));
+    // Contacts are only learned from these events (no contact-list API exists in this Baileys version).
+    const feed = (list) => { try { if (Array.isArray(list) && list.length) this._contactsHandler(list.filter((c) => c && c.id)); } catch (e) { this.logger?.error({ err: e.message }, 'contacts handler failed'); } };
+    sock.ev.on('contacts.upsert', feed);
+    sock.ev.on('contacts.update', feed);
+    sock.ev.on('messaging-history.set', (h) => feed(h && h.contacts));
   }
 
   baileysLogger() {
@@ -200,6 +206,12 @@ class BaileysProvider extends WhatsAppProvider {
   }
   async sendMedia() { return { ok: false, verified: false, error: 'media sending is not implemented yet (Phase 3/4)' }; }
   async publishStatus() { return { ok: false, verified: false, error: 'status publishing is not implemented yet (Phase 4)' }; }
+  /** The privacy MODE only (e.g. "contacts"); WhatsApp does not expose the exception lists through this library. */
+  async getStatusPrivacy() {
+    if (this.state !== 'connected' || !this.sock) return { ok: false, error: 'not connected' };
+    try { const p = await this.sock.fetchPrivacySettings(true); return p && p.status ? { ok: true, mode: String(p.status) } : { ok: false, error: 'setting not reported' }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }
   async listGroups() {
     if (this.state !== 'connected' || !this.sock) return { ok: false, groups: [], error: 'not connected' };
     try {

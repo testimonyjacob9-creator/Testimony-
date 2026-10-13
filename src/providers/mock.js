@@ -12,6 +12,8 @@ class MockProvider extends WhatsAppProvider {
     this.groups = [];
     this.failJids = new Set();
     this.listError = null;
+    this._contactsHandler = () => {};
+    this.statusPrivacy = { ok: true, mode: 'contacts' };
     this._handler = null;
     this._stateHandler = () => {};
   }
@@ -27,6 +29,9 @@ class MockProvider extends WhatsAppProvider {
     return null;
   }
   setGroups(list) { this.groups = list; }
+  onContacts(h) { this._contactsHandler = h; }
+  simulateContacts(list) { this._contactsHandler(list); }
+  async getStatusPrivacy() { return this.statusPrivacy; }
   async sendText(jid, text) {
     const bad = this._guard(); if (bad) return bad;
     if (this.failJids.has(jid)) return { ok: false, verified: false, error: 'simulated send failure' };
