@@ -19,11 +19,11 @@ class CampaignStore {
     return new Set(jids.filter((j) => set.has(j)));
   }
 
-  create({ title, message, targets }) {
+  create({ title, message, targets, propertyId = null, salt = '' }) {
     this.db.exec('BEGIN');
     try {
-      const res = this.db.prepare(`INSERT INTO campaigns (title,message,content_hash,status,created_at) VALUES (?,?,?,'sending',?)`)
-        .run(title, message, hashContent(message), this._now());
+      const res = this.db.prepare(`INSERT INTO campaigns (title,message,content_hash,status,created_at,property_id) VALUES (?,?,?,'sending',?,?)`)
+        .run(title, message, hashContent(message + salt), this._now(), propertyId);
       const id = Number(res.lastInsertRowid);
       const ins = this.db.prepare(`INSERT INTO campaign_sends (campaign_id,group_jid,group_name,status) VALUES (?,?,?,'pending')`);
       for (const t of targets) ins.run(id, t.jid, t.name);
@@ -103,6 +103,7 @@ class CampaignRunner {
       if (!ctx.campaigns.claim(row.id)) continue;
       const settle = (s, d, m) => ctx.campaigns.settle(row.id, s, d, m);
       const g = liveMap.get(row.group_jid);
+      if (c.property_id) { const prop = ctx.properties.get(c.property_id); if (!prop || prop.status !== 'available') { settle('skipped', 'the property is no longer available'); continue; } }
       if (!ctx.groups.isApproved(row.group_jid)) { settle('skipped', 'not on the approved marketing list'); continue; }
       if (!g) { settle('skipped', 'group is no longer accessible (left, removed, or deleted)'); continue; }
       if (g.canSend === false) { settle('skipped', 'only admins can post in this group'); continue; }
@@ -110,7 +111,7 @@ class CampaignRunner {
       if (sentOne) await this.sleep(ctx.config.groupSendDelayMs); // pacing between real sends
       let res;
       try { res = await ctx.provider.sendText(row.group_jid, c.message); } catch (e) { res = { ok: false, error: e.message }; }
-      if (res.ok) { settle('sent', 'accepted by WhatsApp (delivery not confirmed)', res.id || null); sentOne = true; audit(ctx.db, 'campaign', 'group.send', 'ok', `C-${c.id}`); }
+      if (res.ok) { settle('sent', 'accepted by WhatsApp (delivery not confirmed)', res.id || null); sentOne = true; if (c.property_id) ctx.properties.addPublication(c.property_id, 'group', 'accepted', row.group_name); audit(ctx.db, 'campaign', 'group.send', 'ok', `C-${c.id}`); }
       else { settle('failed', String(res.error || 'send failed').slice(0, 200)); sentOne = true; audit(ctx.db, 'campaign', 'group.send', 'failed', `C-${c.id}`); }
     }
     if (ctx.campaigns.finishIfComplete(c.id)) { await this._report(c.id); return true; }

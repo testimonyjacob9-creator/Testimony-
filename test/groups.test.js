@@ -374,13 +374,12 @@ test('per-advert group limit protects against spamming', async () => {
   assert.match(text(await s.send(`/advert 1-3: ${AD}`)), /Destinations \(3\)/);
 });
 
-test('advert text can be a previously sent message ("send this to my approved groups")', async () => {
+test('non-property text sent earlier can be used as the advert ("send this to my approved groups")', async () => {
   const s = await ready(); await approve(s, [1]); await enable(s);
-  const first = text(await s.send(AD));
-  assert.match(first, /did nothing/);
-  assert.equal(groupMsgs(s).length, 0);
+  const note = 'Our annual landlords and tenants meeting holds this Saturday at 10am, everyone is invited please.';
+  assert.match(text(await s.send(note)), /kept it for 30 min/);
   const d = text(await s.send('send this to my approved groups'));
-  assert.match(d, /Advert draft/); assert.ok(d.includes(AD));
+  assert.match(d, /Advert draft/); assert.ok(d.includes(note));
 });
 
 test('provider without group support: refuses honestly', async () => {
@@ -389,9 +388,10 @@ test('provider without group support: refuses honestly', async () => {
   assert.match(text(await s.send(`/advert ${AD}`)), /cannot send to groups/);
 });
 
-test('long advert text mentioning property words is kept as content, not refused as an unsupported feature', async () => {
+test('a long property description becomes a property draft (not refused, not advertised)', async () => {
   const s = await ready();
   const r = text(await s.send('Spacious 3 bedroom house with land and a borehole in Ekpoma. Price N25m, genuine documents.'));
   assert.ok(!/can't do that yet/.test(r));
-  assert.match(r, /kept it for 30 min/);
+  assert.match(r, /PROP-001 saved as a DRAFT/);
+  assert.equal(groupMsgs(s).length, 0);
 });

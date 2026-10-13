@@ -4,6 +4,7 @@ const { summarize } = require('./campaigns');
 const { audit } = require('../storage/db');
 const { setSetting, getSetting, deleteSetting } = require('../storage/settings');
 const { extractNumbers } = require('../nlp/intent');
+const { buildCaption } = require('../properties/caption');
 
 const PAGE = 10;
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -142,15 +143,28 @@ module.exports = {
     return { approved, bad, targets };
   },
 
-  async proposeAdvert({ text, numbers = [] }) {
+  async proposeAdvert({ text, numbers = [], raw = '' }) {
     if (!this.provider.capabilities().groups) return 'The current WhatsApp provider cannot send to groups, so I did nothing.';
     if (!this.groups.postingEnabled()) return 'Group posting is OFF, so nothing was prepared for sending. Turn it on with /groups enable (needs your confirmation).';
     let body = (text || '').trim();
+    let prop = null;
     if (!body) {
-      const cand = getSetting(this.db, 'candidate_content');
-      if (cand && this.clock() - new Date(cand.at) < 30 * 60000) body = cand.text;
+      if (/\bprop-?\s?\d+\b|\bproperty\s+\d+\b/i.test(raw)) {
+        const r = this._resolveProperty(raw, { allowActive: false });
+        if (!r.property) return this._refError(r);
+        prop = r.property;
+      } else {
+        const cand = getSetting(this.db, 'candidate_content');
+        if (cand && this.clock() - new Date(cand.at) < 30 * 60000) body = cand.text;
+        else prop = this._activeProperty();
+      }
     }
-    if (!body) return 'What should the advert say? Send it as: /advert <your text>  (or "send this advertisement to my groups: <text>").';
+    if (prop) {
+      if (prop.status === 'draft') return `${prop.ref} is still a draft. Say "done" to make it available first. Nothing was prepared.`;
+      if (prop.status !== 'available') return `${prop.ref} is ${prop.status}, so I will not advertise it. Nothing was prepared.`;
+      body = buildCaption(prop, 'long');
+    }
+    if (!body) return 'What should the advert say? Send it as: /advert <your text>, or name a saved property: "send PROP-001 to my approved groups".';
     const approved = this.groups.approved();
     if (!approved.length) return 'No groups are approved for marketing yet. Send /groups, then "select groups 1 and 3".';
     let targets;
@@ -160,7 +174,7 @@ module.exports = {
       targets = r.targets;
     } else targets = approved.map((a, i) => ({ jid: a.jid, name: this._currentName(a), num: i + 1 }));
     if (targets.length > this.config.maxGroupsPerCampaign) return `That is ${targets.length} groups; my limit is ${this.config.maxGroupsPerCampaign} per advert to avoid spamming. Pick fewer, e.g. "only groups 1-${this.config.maxGroupsPerCampaign}".`;
-    const { task, note } = this._newProposal({ kind: 'campaign', title: body.slice(0, 40), payload: { text: body, targets } });
+    const { task, note } = this._newProposal({ kind: 'campaign', title: prop ? prop.ref : body.slice(0, 40), payload: { text: body, targets, propertyId: prop ? prop.id : null } });
     deleteSetting(this.db, 'candidate_content');
     return note + this._renderDraft(task);
   },
@@ -217,6 +231,8 @@ module.exports = {
     const a = args.trim();
     if (!a || a.toLowerCase() === 'status') return a ? this.advertStatus() : this.advertStatus();
     if (a.toLowerCase() === 'stop') return this.stopCampaign(this.store.activeProposal());
+    const pm = a.match(/^(?:([\d\s,\-and]+):\s*)?(prop-?\s?\d+)$/i);
+    if (pm) return this.proposeAdvert({ text: '', numbers: pm[1] ? extractNumbers(pm[1]) : [], raw: pm[2] });
     const m = a.match(/^([\d\s,\-and]+):\s*([\s\S]+)$/i);
     if (m) return this.proposeAdvert({ text: m[2], numbers: extractNumbers(m[1]) });
     return this.proposeAdvert({ text: a, numbers: [] });

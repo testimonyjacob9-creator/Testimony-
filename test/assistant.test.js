@@ -190,10 +190,13 @@ test('stale queued messages (e.g. from while offline) are not executed', async (
   assert.match((await s.send('/status')).replies[0], /Automation: running/);
 });
 
-test('media-only message gets an honest text-only reply', async () => {
+test('media with no usable type is refused honestly and nothing is stored', async () => {
   const s = await connected();
   const r = await s.send('', { media: { type: 'image' } });
-  assert.match(r.replies[0], /only read text/);
+  assert.match(r.replies[0], /did not save that file/);
+  assert.equal(s.assistant.properties.list({}).length, 0);
+  const v = await s.send('', { media: { type: 'audio', mime: 'audio/ogg', size: 10 } });
+  assert.match(v.replies[0], /only store photos and videos/);
 });
 
 test('announces once on first connection, with restored task count', async () => {

@@ -225,3 +225,23 @@ test('listGroups: failures and disconnected state return ok:false with no groups
   sock.groupFetchAllParticipating = async () => { throw new Error('rate-overlimit'); };
   assert.deepEqual(await p.listGroups(), { ok: false, groups: [], error: 'rate-overlimit' });
 });
+
+test('media messages: descriptor has type/mime/size and streams via downloadContentFromMessage (no URL exposed)', async () => {
+  const { p, sock, fake } = await open('self');
+  fake.downloadContentFromMessage = async (node, type) => (async function* () { yield Buffer.from(`${type}:`); yield Buffer.from('DATA'); })();
+  const got = [];
+  p.onMessage(async (m) => got.push(m));
+  const now = Math.floor(Date.now() / 1000);
+  sock.ev.emit('messages.upsert', { type: 'notify', messages: [
+    { key: { remoteJid: `${OWNER}@s.whatsapp.net`, fromMe: true, id: 'm1' }, messageTimestamp: now, message: { imageMessage: { mimetype: 'image/jpeg', fileLength: 1234, caption: 'hi', url: 'https://mmg.whatsapp.net/secret', directPath: '/x' } } },
+    { key: { remoteJid: `${OWNER}@s.whatsapp.net`, fromMe: true, id: 'm2' }, messageTimestamp: now, message: { audioMessage: { mimetype: 'audio/ogg; codecs=opus', fileLength: 10 } } },
+  ] });
+  await tick(); await tick(); await tick();
+  assert.equal(got.length, 2);
+  const [img, aud] = got;
+  assert.deepEqual([img.media.type, img.media.mime, img.media.size, img.text], ['image', 'image/jpeg', 1234, 'hi']);
+  assert.ok(!JSON.stringify({ ...img, media: { ...img.media, open: undefined } }).includes('mmg.whatsapp.net'), 'download URL must not leak into the message');
+  let buf = Buffer.alloc(0); for await (const c of await img.media.open()) buf = Buffer.concat([buf, c]);
+  assert.equal(buf.toString(), 'image:DATA');
+  assert.equal(aud.media.type, 'audio'); assert.equal(aud.media.open, undefined, 'audio is not downloadable here');
+});

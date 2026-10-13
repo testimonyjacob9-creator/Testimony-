@@ -50,6 +50,7 @@ const groupActions = {
       const secs = Math.round(ctx.config.groupSendDelayMs / 1000);
       const lines = ['Message:', '---', text.length > 900 ? text.slice(0, 900) + ' [...]' : text, '---', `Destinations (${targets.length}):`];
       targets.forEach((t) => lines.push(`${t.num}. ${t.name}${dup.has(t.jid) ? '  (got this advert recently: will be SKIPPED)' : ''}`));
+      if (task.payload.propertyId) lines.push('Linked property: ' + (ctx.properties.getAny(task.payload.propertyId) || {}).ref + '. TEXT ONLY: photos/videos are not sent to groups yet. The property is re-checked as available before every send.');
       lines.push(`Pace: one group every ${secs}s (about ${Math.max(1, Math.round(((targets.length - 1) * secs) / 60))} min). Each group is re-checked right before sending.`);
       lines.push('Change destinations: "only groups 2 and 4", "add group 3", "remove group 3". Numbers = /groups selected.');
       return { heading: 'Advert draft', pending: 'sent', confirm: 'start sending', lines };
@@ -59,7 +60,7 @@ const groupActions = {
       const targets = task.payload.targets.filter((t) => ctx.groups.isApproved(t.jid));
       const dropped = task.payload.targets.length - targets.length;
       if (!targets.length) throw new Error('None of those groups are approved any more. Nothing was sent.');
-      const id = ctx.campaigns.create({ title: task.title, message: task.payload.text, targets });
+      const id = ctx.campaigns.create({ title: task.title, message: task.payload.text, targets, propertyId: task.payload.propertyId || null });
       ctx.store.finish(task.id, JSON.stringify({ campaignId: id }));
       const secs = Math.round(ctx.config.groupSendDelayMs / 1000);
       return `Advert C-${id} STARTED (not yet sent): ${targets.length} group${targets.length === 1 ? '' : 's'}, one every ${secs}s${dropped ? `; ${dropped} dropped because they are no longer approved` : ''}. I'll report the real results when it finishes. Say "stop the advert" to cancel what hasn't been sent.`;

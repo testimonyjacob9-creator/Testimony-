@@ -39,6 +39,9 @@ function loadConfig(env = process.env) {
   const dedupeHours = Number(env.GROUP_DEDUPE_HOURS || 24);
   if (!Number.isFinite(dedupeHours) || dedupeHours < 0 || dedupeHours > 720) errors.push('GROUP_DEDUPE_HOURS must be 0-720');
 
+  const ackDelay = Number(env.MEDIA_ACK_DELAY_MS ?? 3000);
+  if (!Number.isFinite(ackDelay) || ackDelay < 0 || ackDelay > 60000) errors.push('MEDIA_ACK_DELAY_MS must be 0-60000');
+
   const timezone = env.TIMEZONE || 'Africa/Lagos';
   if (!validTimezone(timezone)) errors.push(`TIMEZONE "${timezone}" is not a valid IANA timezone`);
 
@@ -58,7 +61,7 @@ function loadConfig(env = process.env) {
   const dataDir = path.resolve(env.DATA_DIR || './data');
   return Object.freeze({
     ownerPhone, provider, timezone, accountMode, botPhone, ownerLid,
-    proposalTtlMs: Math.floor(ttl * 60 * 1000),
+    proposalTtlMs: Math.floor(ttl * 60 * 1000), mediaAckDelayMs: ackDelay,
     groupSendDelayMs: Math.floor(delaySec * 1000), maxGroupsPerCampaign: maxGroups, groupDedupeMs: Math.floor(dedupeHours * 3600 * 1000),
     logLevel: env.LOG_LEVEL || 'info',
     dataDir,

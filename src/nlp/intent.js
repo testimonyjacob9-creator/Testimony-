@@ -1,5 +1,6 @@
 'use strict';
 const { parseWhen, atLocalDay, nextLocalMidnight } = require('./time');
+const { looksLikeProperty } = require('../properties/parse');
 
 const CONFIRM = /^(yes|y|yep|yeah|yup|confirm(ed)?|ok(ay)?|go ahead|do it|proceed|sure|post it|send it|approve(d)?)[.! ]*$/i;
 const DENY = /^(no|n|nope|nah|discard|abort|never ?mind|forget it|don'?t|do not)[.! ]*$/i;
@@ -15,14 +16,20 @@ const G_REMOVE = /\b(remove|deselect|unselect|drop|delete)\b.*\bgroups?\b/i;
 const G_SHOW_SEL = /\b(show|list|see|view|display)\b.*\b(approved|selected|marketing)\b.*\bgroups?\b|\b(approved|selected|marketing) groups\b/i;
 const G_SHOW = /\b(show|list|see|view|display)\b.*\bgroups\b/i;
 const G_NEXT = /\b(next page|more groups)\b/i;
-const ADVERT = /\b(send|post|share|broadcast|promote)\b.*\b(advert(isement)?|ad|listing|promo(tion)?|message|this)\b.*\b(to|in|on)\b.*\bgroups?\b/i;
+const ADVERT = /\b(send|post|share|broadcast|promote)\b.*\b(advert(isement)?|ad|listing|promo(tion)?|message|this|prop-?\s?\d+|propert(?:y|ies))\b.*\b(to|in|on)\b.*\bgroups?\b/i;
 const C_ONLY = /\bonly\b.*\bgroups?\b/i;
 const C_ADD = /\b(add|include)\b.*\bgroups?\b/i;
 const C_REMOVE = /\b(remove|exclude|skip|drop)\b.*\bgroups?\b/i;
+const P_LIST = /\b(show|list|see|view|display)\b.*\bproperties\b|^\s*properties\s*$/i;
+const P_SHOW = /\b(show|view|open|details?)\b.*(\b(?:apartment|flat|duplex|bungalow|house|land|plot|shop|office|room|villa|mansion)\b|\bprop-?\s?\d+\b|\bproperty\s+(?:number\s+)?\d+\b|\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:property|one)\b)/i;
+const P_STATUS = /\b(mark|set|flag)\b.*\b(sold|rented|unavailable|available)\b|\b(?:prop-?\s?\d+|property\s+\d+)\b.*\b(?:is|has been|was)\s+(?:now\s+)?(sold|rented|unavailable|available)\b/i;
+const P_EDIT = /\b(?:change|update|set|edit)\b\s+(?:the\s+)?(?:(?:prop-?\s?\d+|property\s+\d+|this)\s+)?(price|title|location|contact|phone|bedrooms?|bathrooms?|description|caption|listing)\b(?:\s+of\s+[\w\s-]+?)?\s+(?:to|as)\s+([\s\S]+)$/i;
+const P_DELETE = /\b(delete|remove|discard)\b.*\b(prop-?\s?\d+|property|draft)\b/i;
+const P_DONE = /^\s*(done|save( it)?|that'?s all|finished|all done)\s*[.!]*$/i;
+const P_CAPTION = /\bcaptions?\b/i;
 const AUDIENCE = /\b(status audience|who (can|will) see my status|status recipients)\b/i;
 const C_STOP = /\b(stop|cancel|abort)\b.*\b(campaign|advert(isement)?|sending|group posts?)\b/i;
 const UNSUPPORTED = [
-  [/\b(propert(y|ies)|listing|caption|house|land|apartment)\b/i, 'Property management', 3],
   [/\b(status|story|post)\b/i, 'Status posting', 4],
   
   [/\b(buyer|seller|lead|client|follow ?up)\b/i, 'Lead management', 6],
@@ -86,9 +93,17 @@ function interpret(text, st) {
     if (C_ADD.test(raw)) return { intent: 'campaign_retarget', mode: 'add', numbers: extractNumbers(raw) };
     if (C_REMOVE.test(raw)) return { intent: 'campaign_retarget', mode: 'remove', numbers: extractNumbers(raw) };
   }
+  if (P_DONE.test(raw)) return { intent: 'property_done' };
+  if (P_EDIT.test(raw)) { const m = raw.match(P_EDIT); return { intent: 'property_edit', field: m[1], value: m[2], text: raw.slice(0, raw.length - m[2].length) }; }
+  if (P_STATUS.test(raw)) { const m = raw.match(/\b(sold|rented|unavailable|available)\b/i); return { intent: 'property_status', status: m[1].toLowerCase(), text: raw }; }
+  if (P_DELETE.test(raw)) return { intent: 'property_delete', text: raw };
+  if (P_CAPTION.test(raw)) { const t = raw.toLowerCase(); return { intent: 'caption', style: /\bshort\b/.test(t) ? 'short' : /\b(long|detailed)\b/.test(t) ? 'long' : 'all', text: raw }; }
+  if (P_SHOW.test(raw)) return { intent: 'property_show', text: raw };
+  if (P_LIST.test(raw)) return { intent: 'property_list', text: raw };
+  if (st.hasActiveProperty && !looksLikeProperty(raw) && raw.length < 90 && /\b(contact|phone|whatsapp|call|number)\b/i.test(raw) && /(?:\+?234[\s-]?|\b0)[789][01]\d[\s-]?\d{3}[\s-]?\d{4}\b/.test(raw)) return { intent: 'property_contact', text: raw };
   if (AUDIENCE.test(raw)) return { intent: 'command', name: 'audience', args: '' };
   if (C_STOP.test(raw)) return { intent: 'campaign_stop' };
-  if (ADVERT.test(raw)) { const { head, text } = splitAdvert(raw); return { intent: 'advert', text, numbers: extractNumbers(head) }; }
+  if (ADVERT.test(raw)) { const { head, text } = splitAdvert(raw); return { intent: 'advert', text, numbers: extractNumbers(head.replace(/prop-?\s?\d+/ig, ' ')), raw }; }
   if (G_NEXT.test(raw)) return { intent: 'groups_page', delta: 1 };
   if (G_SELECT.test(raw)) return { intent: 'groups_select', numbers: extractNumbers(raw) };
   if (G_REMOVE.test(raw)) return { intent: 'groups_remove', numbers: extractNumbers(raw), name: nameQuery(raw) };

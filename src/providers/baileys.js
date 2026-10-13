@@ -40,8 +40,18 @@ function mediaTypeOf(message) {
   return null;
 }
 
+/** Provider-neutral media descriptor. `open()` streams the file; no URL is ever exposed or stored. */
+function describeMedia(message, type, openMedia) {
+  const node = unwrap(message)[`${type}Message`] || {};
+  const size = Number(node.fileLength && node.fileLength.toString ? node.fileLength.toString() : node.fileLength);
+  return {
+    type, mime: node.mimetype, size: Number.isFinite(size) && size > 0 ? size : undefined, fileName: node.fileName, seconds: node.seconds,
+    open: openMedia && (type === 'image' || type === 'video') ? () => openMedia(node, type) : undefined,
+  };
+}
+
 /** Convert a raw Baileys message into the provider-neutral InboundMessage (or null to skip). */
-function normalizeMessage(raw, self = {}) {
+function normalizeMessage(raw, self = {}, openMedia = null) {
   const key = raw && raw.key; if (!key || !key.remoteJid || !raw.message) return null;
   const chat = key.remoteJid;
   if (chat === 'status@broadcast' || chat.endsWith('@broadcast') || chat.endsWith('@newsletter')) return null;
@@ -62,7 +72,7 @@ function normalizeMessage(raw, self = {}) {
   const ts = Number(raw.messageTimestamp && raw.messageTimestamp.toString ? raw.messageTimestamp.toString() : raw.messageTimestamp) * 1000;
   return {
     id: key.id, from, fromLid, chat, chatIsSelf, isGroup, fromMe,
-    text: text || undefined, media: mediaType ? { type: mediaType } : undefined,
+    text: text || undefined, media: mediaType ? describeMedia(raw.message, mediaType, openMedia) : undefined,
     timestamp: Number.isFinite(ts) && ts > 0 ? ts : Date.now(),
   };
 }
@@ -189,11 +199,16 @@ class BaileysProvider extends WhatsAppProvider {
     if (!this._handler || !Array.isArray(messages)) return;
     if (type !== 'notify' && type !== 'append') return;
     for (const raw of messages) {
-      const msg = normalizeMessage(raw, this.self);
+      const msg = normalizeMessage(raw, this.self, (node, type) => this._chunks(node, type));
       if (!msg) continue;
       if (type === 'append' && Date.now() - msg.timestamp > 30000) continue; // history sync, not live
       try { await this._handler(msg); } catch (e) { this.logger?.error({ err: e.message }, 'message handler failed'); }
     }
+  }
+
+  async *_chunks(node, type) {
+    const stream = await this.baileys.downloadContentFromMessage(node, type);
+    for await (const chunk of stream) yield chunk;
   }
 
   async sendText(to, text) {

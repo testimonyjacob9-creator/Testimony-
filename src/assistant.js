@@ -10,6 +10,10 @@ const { audit } = require('./storage/db');
 const { GroupStore } = require('./groups/store');
 const { CampaignStore } = require('./groups/campaigns');
 const { AudienceStore } = require('./status/audience');
+const { PropertyStore } = require('./properties/store');
+const { MediaStore } = require('./media/store');
+const { looksLikeProperty } = require('./properties/parse');
+const { parseFilters } = require('./properties/commands');
 
 const PREFIX = '🤖';
 const STALE_MS = 10 * 60 * 1000;
@@ -23,6 +27,7 @@ const HELP = `${PREFIX} *Commands*
 /resume - resume automation
 /groups - list your groups (+ select, selected, remove, clear, enable, disable)
 /audience - who can receive your Status posts
+/properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
 /advert <text> - draft an advert for your approved groups (needs your yes)
 
 *You can also just type*, e.g.
@@ -31,7 +36,7 @@ const HELP = `${PREFIX} *Commands*
 "Don't post anything today"
 
 Every action is drafted first. Nothing runs until you reply *yes*.
-Coming later: properties, status posts, leads.`;
+Coming later: Status posts, schedules, leads.`;
 
 /** Provider-independent command layer. Depends only on the WhatsAppProvider interface. */
 class Assistant {
@@ -41,13 +46,16 @@ class Assistant {
     this.groups = new GroupStore(db, clock);
     this.campaigns = new CampaignStore(db, clock);
     this.audience = new AudienceStore(db, clock);
+    this.properties = new PropertyStore(db, clock);
+    this.media = new MediaStore({ db, config, clock });
+    this.mediaAck = new Map(); this.mediaAckTimer = null;
     this.ownerJid = `${config.ownerPhone}@s.whatsapp.net`;
     this.prefix = PREFIX;
     this.seen = new Set(); this.sentIds = new Set(); this.rejectLog = new Map();
     this.queue = Promise.resolve();
     this.startedAt = clock(); this.announced = false; this.restored = 0;
   }
-  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, audience: this.audience, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
+  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, audience: this.audience, properties: this.properties, media: this.media, schedules: this.schedules, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
 
   start() {
     this.restored = this.store.recoverRunning();
@@ -85,7 +93,8 @@ class Assistant {
     if (msg.timestamp && this.clock().getTime() - msg.timestamp > STALE_MS) {
       audit(this.db, 'owner', 'command', 'ignored_stale'); return { handled: false, reason: 'stale' };
     }
-    if (!text) { await this._send(msg.chat, `${PREFIX} I can only read text commands right now. Media intake arrives in Phase 3.`); return { handled: true }; }
+    if (msg.media) return this._handleMedia(msg);
+    if (!text) return { handled: false, reason: 'empty' };
     let reply;
     try { reply = await this.process(text); }
     catch (e) {
@@ -133,7 +142,7 @@ class Assistant {
     const now = this.clock();
     const proposal = this.store.activeProposal();
     const awaiting = this._conversation();
-    const it = interpret(text, { now, tz: this.config.timezone, awaiting, proposalKind: proposal && proposal.kind });
+    const it = interpret(text, { now, tz: this.config.timezone, awaiting, proposalKind: proposal && proposal.kind, hasActiveProperty: !!this._activeProperty() });
     switch (it.intent) {
       case 'command': return this.runCommand(it.name, it.args, now);
       case 'confirm': return this.confirm(proposal);
@@ -147,6 +156,14 @@ class Assistant {
       case 'advert': return this.proposeAdvert(it);
       case 'campaign_retarget': return this.retargetCampaign(it, proposal);
       case 'campaign_stop': return this.stopCampaign(proposal);
+      case 'property_done': return this.propertyDone();
+      case 'property_contact': return this.propertyAddContact(it.text);
+      case 'property_list': return this.propertyList(parseFilters(it.text));
+      case 'property_show': { const r = this._resolveProperty(it.text); return r.property ? this.propertyShow(r.property) : this._refError(r); }
+      case 'property_status': { const r = this._resolveProperty(it.text); return r.property ? this.propertyStatusChange(r.property, it.status) : this._refError(r); }
+      case 'property_edit': { const r = this._resolveProperty(it.text); return r.property ? this.propertyEdit(r.property, it.field, it.value) : this._refError(r); }
+      case 'property_delete': { const r = this._resolveProperty(it.text, { allowActive: false }); return r.property ? this.propertyDelete(r.property) : this._refError(r); }
+      case 'caption': { const r = this._resolveProperty(it.text); return r.property ? this.captionReply(r.property, it.style) : this._refError(r); }
       case 'pause': return this.pause(it.until, now);
       case 'resume': return this.resume();
       case 'cancel': return this.cancel(it, proposal, now);
@@ -156,6 +173,7 @@ class Assistant {
       case 'unsupported': return `I can't do that yet: ${it.feature} arrives in Phase ${it.phase}. Nothing was posted or sent. Right now I handle reminders, /tasks, /pause and /resume.`;
       case 'empty': return HELP;
       default: {
+        if (looksLikeProperty(text)) return this.propertyIntake(text);
         if (text.length >= 40) {
           setSetting(this.db, 'candidate_content', { text, at: now.toISOString() });
           return `I didn't recognise that as a command, so I did nothing. I kept it for 30 min in case it is an advert: say "send this to my approved groups" and I'll prepare a draft (nothing is sent without your confirmation).`;
@@ -176,7 +194,9 @@ class Assistant {
       case 'audience': return this.audienceCommand(args);
       case 'groups': return this.groupsCommand(args);
       case 'advert': return this.advertCommand(args);
-      case 'properties': return 'Property management arrives in Phase 3. Nothing is stored yet.';
+      case 'properties': { const m = args.match(/^page\s+(\d+)$/i); return m ? this.propertyList({}, Number(m[1])) : this.propertyList(args ? { text: args } : {}); }
+      case 'property': return this.propertyCommand(args);
+      case 'caption': { const parts = args.trim().split(/\s+/); const st = ['short', 'long', 'standard'].includes((parts[parts.length - 1] || '').toLowerCase()) ? parts.pop().toLowerCase() : 'all'; const r = this._resolveProperty(parts.join(' ')); return r.property ? this.captionReply(r.property, st) : this._refError(r); }
       case 'schedule': return 'Daily schedules arrive in Phase 7. Reminders you set now are already persistent: see /tasks.';
       case 'settings': return 'Settings arrive in a later phase. Current: timezone ' + this.config.timezone + '.';
       default: return `Unknown command /${name}. Send /help.`;
@@ -297,11 +317,14 @@ Failed tasks: ${c.failed || 0}
 Time: ${this._fmt(now)} (${this.config.timezone})
 Uptime: ${Math.floor(up / 60)}h ${up % 60}m
 Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.approved().length} approved group(s))
-Not built yet: properties, status posting, leads`;
+Properties: ${this.properties.list({}).length} saved
+Not built yet: Status posting, scheduling, leads`;
   }
 }
 
 Object.assign(Assistant.prototype, require('./groups/commands'));
 Object.assign(Assistant.prototype, require('./status/commands'));
+const propertyMixin = { ...require('./properties/commands') }; delete propertyMixin.parseFilters;
+Object.assign(Assistant.prototype, propertyMixin);
 
 module.exports = { Assistant, PREFIX };

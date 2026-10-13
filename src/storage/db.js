@@ -93,6 +93,36 @@ const MIGRATIONS = [
       -- Contacts WhatsApp identifies only by an anonymous ID: cannot be targeted, counted for honesty.
       CREATE TABLE contacts_lid_only (lid TEXT PRIMARY KEY, last_seen TEXT NOT NULL);`,
   },
+  {
+    version: 5,
+    sql: `
+      CREATE TABLE properties (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ref TEXT NOT NULL UNIQUE,
+        title TEXT, location TEXT, ptype TEXT,
+        listing TEXT CHECK (listing IS NULL OR listing IN ('sale','rent','lease')),
+        price INTEGER, bedrooms INTEGER, bathrooms INTEGER, land_size TEXT,
+        features TEXT, facilities TEXT, documentation TEXT, contact TEXT, agent TEXT,
+        description TEXT, caption TEXT,
+        status TEXT NOT NULL CHECK (status IN ('draft','available','sold','rented','unavailable')),
+        received_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
+      );
+      CREATE TABLE property_media (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        kind TEXT NOT NULL CHECK (kind IN ('image','video')),
+        rel_path TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL,
+        original_name TEXT, position INTEGER NOT NULL, created_at TEXT NOT NULL,
+        UNIQUE (property_id, sha256)
+      );
+      -- Where a listing actually went (accepted by WhatsApp), per destination.
+      CREATE TABLE publications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        destination TEXT NOT NULL, detail TEXT, outcome TEXT NOT NULL, at TEXT NOT NULL
+      );
+      ALTER TABLE campaigns ADD COLUMN property_id INTEGER;`,
+  },
 ];
 
 function openDatabase(dbPath) {
