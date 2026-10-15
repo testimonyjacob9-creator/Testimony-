@@ -1,8 +1,8 @@
 'use strict';
-const { extract, parsePrice, looksLikeProperty, titleFor, missingFields, PHONE } = require('./parse');
+const { extract, extractItem, parsePrice, looksLikeProperty, titleFor, missingFields, PHONE } = require('./parse');
 const { buildCaption, naira } = require('./caption');
 const { audit } = require('../storage/db');
-const { getSetting, setSetting } = require('../storage/settings');
+const { getSetting, setSetting, deleteSetting } = require('../storage/settings');
 
 const ACTIVE_MS = 2 * 3600000;
 const ORD = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
@@ -50,8 +50,27 @@ module.exports = {
   },
 
   // ---------- intake ----------
+  _defaultContact() { const c = getSetting(this.db, 'default_contact'); return c && c.number ? c.number : null; },
+  contactCommand(args) {
+    const m = String(args || '').match(PHONE);
+    if (!String(args || '').trim()) { const c = this._defaultContact(); return c ? `Your saved contact number is ${c}. It is added to new items and properties that do not state one. Change it with /contact <number>.` : 'No contact number is saved. Send /contact 08012345678 once and I will add it to new items and properties.'; }
+    if (!m) return 'That does not look like a Nigerian phone number. Example: /contact 08012345678. Nothing was changed.';
+    const number = `0${m[1]}${m[2]}${m[3]}`;
+    setSetting(this.db, 'default_contact', { number, at: this.clock().toISOString() });
+    audit(this.db, 'owner', 'contact.default', 'ok');
+    return `Saved. New items and properties without their own number will use ${number}. Items already created are not changed.`;
+  },
+  _createItem(caption) {
+    const f = extractItem(caption);
+    const p = this.properties.create({ ptype: 'item', title: f.title, price: f.price, contact: f.contact || this._defaultContact() || undefined, description: caption.slice(0, 1500) }, 'draft');
+    const b = getSetting(this.db, 'item_batch'); const now = this.clock();
+    const fresh = b && now - new Date(b.at) < 30 * 60000;
+    setSetting(this.db, 'item_batch', { ids: [...(fresh ? b.ids : []), p.id], at: now.toISOString() });
+    audit(this.db, 'owner', 'item.create', 'ok', p.ref);
+    return p;
+  },
   _createFromText(text) {
-    const f = extract(text);
+    const f = extract(text); if (!f.contact && this._defaultContact()) f.contact = this._defaultContact();
     const p = this.properties.create({ ...f, title: titleFor(f, text), description: text.slice(0, 1500) }, 'draft');
     audit(this.db, 'owner', 'property.create', 'ok', p.ref);
     return p;
@@ -73,6 +92,15 @@ module.exports = {
     return `*${p.ref} saved as a DRAFT* (not posted anywhere)\n${p.title || '(no title yet)'}\nPrice: ${p.price ? naira(p.price) : 'not stated'} | Photos: ${c.images} | Videos: ${c.videos}${miss.length ? `\nStill missing: ${miss.join(', ')}` : ''}\nSend photos/videos now${miss.length ? ', give the missing details (e.g. "set contact to 08012345678")' : ''}, then say *done* to make it available. Nothing is posted until you confirm a post or schedule.`;
   },
   propertyDone() {
+    const b = getSetting(this.db, 'item_batch');
+    if (b && this.clock() - new Date(b.at) < 30 * 60000) {
+      const drafts = b.ids.map((id) => this.properties.get(id)).filter((x) => x && x.status === 'draft');
+      if (drafts.length) {
+        for (const x of drafts) this.properties.setStatus(x.id, 'available');
+        audit(this.db, 'owner', 'item.available', 'ok', String(drafts.length));
+        return `${drafts.length} item(s) are now AVAILABLE (not posted anywhere): ${drafts.map((x) => x.ref).join(', ')}. To post them: "post these on my status now".`;
+      }
+    }
     const p = this._activeProperty();
     if (!p) return 'There is no property in progress. Send a description or photos first.';
     if (p.status !== 'draft') return `${p.ref} is already ${p.status}.`;
@@ -98,23 +126,24 @@ module.exports = {
     if (!v.ok) { await reply(`I did not save that file: ${v.error}.`); return { handled: true }; }
     if (typeof media.open !== 'function') { await reply('The WhatsApp provider could not give me that file, so it was NOT saved.'); return { handled: true }; }
     const caption = (msg.text || '').trim();
-    let p; let created = false;
+    let p; let created = false; let isItem = false;
     if (caption && looksLikeProperty(caption)) { p = this._createFromText(caption); created = true; }
+    else if (caption.length >= 3 && !caption.startsWith('/') && !/^(done|yes|no)\b/i.test(caption)) { p = this._createItem(caption); created = true; isItem = true; }
     else p = this._activeProperty();
     if (!p) { p = this.properties.create({}, 'draft'); created = true; audit(this.db, 'owner', 'property.create', 'ok', p.ref); }
     let res;
     try { res = await this.media.save({ property: p, mime: media.mime, declaredSize: media.size, originalName: media.fileName, stream: await media.open() }); }
     catch (e) { res = { ok: false, error: e.message }; }
     if (!res.ok) {
-      if (created && !this.media.forProperty(p.id).length && !p.description) this.properties.softDelete(p.id);
+      if (created && !this.media.forProperty(p.id).length && (!p.description || isItem)) this.properties.softDelete(p.id);
       await reply(`I could NOT save that file: ${res.error}.`);
       return { handled: true };
     }
     this._setActive(p.id);
     audit(this.db, 'owner', 'media.save', res.duplicate ? 'duplicate' : 'ok', p.ref);
-    const acc = this.mediaAck.get(p.id) || { saved: 0, dupes: 0, chat: msg.chat, intro: null };
+    const acc = this.mediaAck.get(p.id) || { saved: 0, dupes: 0, chat: msg.chat, intro: null, item: p.ptype === 'item' };
     if (res.duplicate) acc.dupes++; else acc.saved++;
-    if (created && caption) acc.intro = this._intakeReply(this.properties.get(p.id));
+    if (created && caption && !isItem) acc.intro = this._intakeReply(this.properties.get(p.id));
     acc.chat = msg.chat; this.mediaAck.set(p.id, acc);
     if (!this.mediaAckTimer) { this.mediaAckTimer = setTimeout(() => { this.flushMediaAck().catch(() => {}); }, this.config.mediaAckDelayMs); this.mediaAckTimer.unref?.(); }
     return { handled: true };
@@ -123,12 +152,35 @@ module.exports = {
   async flushMediaAck() {
     if (this.mediaAckTimer) { clearTimeout(this.mediaAckTimer); this.mediaAckTimer = null; }
     const entries = [...this.mediaAck.entries()]; this.mediaAck.clear();
-    for (const [id, acc] of entries) {
+    const itemEntries = entries.filter(([, acc]) => acc.item);
+    if (itemEntries.length) {
+      const rows = itemEntries.map(([id]) => this.properties.get(id)).filter(Boolean);
+      if (rows.length) {
+        const noPrice = rows.filter((p) => !p.price).map((p) => p.ref); const noContact = rows.some((p) => !p.contact);
+        const lines = rows.map((p) => `${p.ref} | ${p.title} | ${p.price ? naira(p.price) : 'price?'} | ${this.media.counts(p.id).images} photo(s), ${this.media.counts(p.id).videos} video(s)`);
+        await this._send(itemEntries[0][1].chat, `${this.prefix} Saved ${rows.length} item(s) as DRAFTS (not posted anywhere):\n${lines.join('\n')}${noPrice.length ? `\nNo price found for: ${noPrice.join(', ')}. Add one like "Change the price of ${noPrice[0]} to ₦15,000", or put it in the caption (e.g. ₦15,000).` : ''}${noContact ? '\nNo contact number on some items: send /contact 08012345678 once, then new items will use it.' : ''}\nSay *done* to make all of these available, then "post these on my status now".`);
+      }
+    }
+    for (const [id, acc] of entries.filter(([, a]) => !a.item)) {
       const p = this.properties.get(id); if (!p) continue;
       const c = this.media.counts(id);
       const msg = `${acc.intro ? acc.intro + '\n' : ''}Saved ${acc.saved} file(s) to ${p.ref}${acc.dupes ? ` (${acc.dupes} duplicate(s) ignored)` : ''}. It now has ${c.images} photo(s) and ${c.videos} video(s).${p.status === 'draft' && !acc.intro ? ' Say *done* when finished.' : ''}`;
       await this._send(acc.chat, `${this.prefix} ${msg}`);
     }
+  },
+
+  proposeStatusBatch(which) {
+    const caps = this.provider.capabilities();
+    if (!caps.publishStatus) return 'The current WhatsApp provider cannot post Status updates, so I did nothing.';
+    if (!this.audience.count()) return 'There are no known Status recipients yet (see /audience). Nothing was prepared.';
+    let ids;
+    if (which === 'all') ids = this.properties.list({ status: 'available', ptype: 'item' }).map((x) => x.id);
+    else { const b = getSetting(this.db, 'item_batch'); ids = b && this.clock() - new Date(b.at) < 2 * 3600000 ? b.ids : []; }
+    const props = ids.map((id) => this.properties.get(id)).filter((x) => x && ['draft', 'available'].includes(x.status));
+    if (!props.length) return 'There are no items waiting to post. Send photos with captions first (or say "post all items on my status now" for everything available). Nothing was prepared.';
+    const MAX = 10; const chosen = props.slice(0, MAX);
+    const { task, note } = this._newProposal({ kind: 'status_batch', title: `Post ${chosen.length} item(s) to Status`, payload: { propertyIds: chosen.map((x) => x.id), skipped: props.length - chosen.length } });
+    return note + this._renderDraft(task);
   },
 
   // ---------- show / list / edit ----------

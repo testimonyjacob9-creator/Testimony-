@@ -8,6 +8,12 @@ const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
  */
 function buildCaption(p, style = 'standard') {
   if (p.caption) return p.caption;
+  if (p.ptype === 'item') {
+    const I = [`🛍 ${p.title || 'Item'}`];
+    if (p.price) I.push(`💰 ${naira(p.price)}`);
+    if (p.contact) I.push(`📞 ${p.contact}`);
+    return I.join('\n');
+  }
   const L = [];
   const label = p.listing ? { sale: 'FOR SALE', rent: 'FOR RENT', lease: 'FOR LEASE' }[p.listing] : null;
   L.push(`🏡 ${p.title || 'Property'}${label ? ` - ${label}` : ''}`);

@@ -29,6 +29,7 @@ const HELP = `${PREFIX} *Commands*
 /groups - list your groups (+ select, selected, remove, clear, enable, disable)
 /schedule - recurring posts (list, pause, resume, cancel, history) | /routine - morning briefing
 /audience - who can receive your Status posts
+/contact <number> - save your contact number for new items
 /properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
 /advert <text> - draft an advert for your approved groups (needs your yes)
 
@@ -149,6 +150,8 @@ class Assistant {
     const now = this.clock();
     const proposal = this.store.activeProposal();
     const awaiting = this._conversation();
+    const bm = String(text).match(/^\s*post\s+(all|these|the\s+new|new)\s+(?:available\s+)?(?:(?:items|listings|products)\s+)?(?:on|to)\s+(?:my\s+)?status(?:\s+now)?\s*[.!]?\s*$/i);
+    if (bm) return this.proposeStatusBatch(/^all$/i.test(bm[1]) ? 'all' : 'new');
     const it = interpret(text, { now, tz: this.config.timezone, awaiting, proposalKind: proposal && proposal.kind, hasActiveProperty: !!this._activeProperty() });
     switch (it.intent) {
       case 'command': return this.runCommand(it.name, it.args, now);
@@ -209,6 +212,7 @@ class Assistant {
       case 'audience': return this.audienceCommand(args);
       case 'groups': return this.groupsCommand(args);
       case 'advert': return this.advertCommand(args);
+      case 'contact': return this.contactCommand(args);
       case 'properties': { const m = args.match(/^page\s+(\d+)$/i); return m ? this.propertyList({}, Number(m[1])) : this.propertyList(args ? { text: args } : {}); }
       case 'property': return this.propertyCommand(args);
       case 'caption': { const parts = args.trim().split(/\s+/); const st = ['short', 'long', 'standard'].includes((parts[parts.length - 1] || '').toLowerCase()) ? parts.pop().toLowerCase() : 'all'; const r = this._resolveProperty(parts.join(' ')); return r.property ? this.captionReply(r.property, st) : this._refError(r); }

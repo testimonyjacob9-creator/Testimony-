@@ -27,3 +27,12 @@ Built only from saved fields (title, location, price, sale/rent label, rooms, fe
 
 ## Linking to marketing
 `send PROP-001 to my approved groups` (text-only caption; photos/videos are not sent to groups yet) re-checks that the property is still *available* before **every** group send and records each accepted send in the property's history (`show PROP-001`).
+
+## Items (anything that is not real estate)
+Send a **photo with a caption** and each captioned photo becomes its own **item** draft (same PROP-001 numbering, `ptype=item`). The title is your own caption words; a price is read only when it is clearly a price (`₦15,000`, `N85k`, `1.5 million`; a bare number such as `2000 watts` is never a price) and a Nigerian phone number is read as the contact. Photos sent **without** a caption attach to the last item. A caption that states a real-estate type plus details still creates a property, and captions starting with `/` or saying done/yes/no never create items.
+- `/contact 08012345678` saves your number once; items and properties that do not state one use it (existing records are not changed).
+- A burst of captioned photos gets ONE summary listing every draft. `done` makes the whole batch available.
+- `post these on my status now` (the batch you just added) or `post all items on my status now` (every available item) drafts one Status post per item (max 10 per draft); `yes` queues them, each reported separately as "accepted by WhatsApp".
+- Item captions are built as: `🛍 title`, `💰 price`, `📞 contact` (no Ref line). Item posts to groups are text only, like properties.
+- To fix a price: `Change the price of PROP-003 to ₦15,000`.
+Verified by automated tests against the mock provider only; not yet tried on live WhatsApp.

@@ -3,6 +3,8 @@ const { formatLocal } = require('../nlp/time');
 const { isoDate } = require('../schedule/store');
 const { buildCaption } = require('../properties/caption');
 const { missingFields } = require('../properties/parse');
+const { localParts } = require('../nlp/time');
+const { naira } = require('../properties/caption');
 
 const DAYN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const pretty = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`; };
@@ -80,6 +82,37 @@ const scheduleActions = {
       return `Schedule S-${s.id} is ACTIVE: ${p.ref} -> ${destination === 'status' ? 'Status' : 'groups'}, ${planLabel(plan)}. Next run: ${formatLocal(new Date(s.next_run_at), ctx.config.timezone)}. Nothing has been posted yet.`;
     },
     async execute() { throw new Error('schedule_create runs only via confirmation'); },
+  },
+  status_batch: {
+    pausable: false,
+    describe(ctx, task) {
+      const { propertyIds, skipped = 0 } = task.payload;
+      const rows = propertyIds.map((id) => ctx.properties.getAny(id)).filter(Boolean);
+      const lines = rows.map((p) => `${p.ref} ${p.title || ''} | ${p.price ? naira(p.price) : 'no price'} | ${ctx.media.counts(p.id).images} photo(s)`);
+      lines.push(`Destination: WhatsApp Status (${ctx.audience.count()} known recipients), one post per item, sent one after another.`);
+      if (skipped) lines.push(`Note: only the first ${rows.length} are included; ${skipped} more are not. Send the command again afterwards for the rest.`);
+      if (rows.some((p) => p.status === 'draft')) lines.push('Note: draft items will be marked available.');
+      const miss = rows.filter((p) => missingFields(p).length); if (miss.length) lines.push(`Note: missing details on ${miss.map((p) => p.ref).join(', ')} (they will post as they are).`);
+      lines.push('Note: WhatsApp privacy settings decide who sees a Status; I cannot confirm visibility.');
+      return { heading: 'Post items to Status', pending: 'posted', confirm: 'post now', lines };
+    },
+    async onConfirm(ctx, task) {
+      if (!ctx.provider.capabilities().publishStatus) throw new Error('The provider cannot post Status updates. Nothing was scheduled.');
+      if (!ctx.audience.count()) throw new Error('There are no known Status recipients (see /audience). Nothing was scheduled.');
+      const tz = ctx.config.timezone; const now = ctx.clock(); const lp = localParts(now, tz);
+      const time = `${String(lp.h).padStart(2, '0')}:${String(lp.mi).padStart(2, '0')}`; const today = isoDate(now, tz);
+      const made = []; const skippedRefs = [];
+      for (const id of task.payload.propertyIds) {
+        const p = ctx.properties.get(id);
+        if (!p || DEAD.includes(p.status)) { skippedRefs.push(p ? p.ref : `#${id}`); continue; }
+        if (p.status === 'draft') ctx.properties.setStatus(p.id, 'available');
+        made.push({ p, s: ctx.schedules.create({ propertyId: p.id, destination: 'status', kind: 'once', time, days: null, onceDate: today, startDate: today, endDate: null, timezone: tz, immediate: true }) });
+      }
+      if (!made.length) throw new Error('None of those items can be posted any more. Nothing was scheduled.');
+      ctx.store.finish(task.id, JSON.stringify({ scheduleIds: made.map((m) => m.s.id) }));
+      return `Posting ${made.length} item(s) to Status has been QUEUED (${made.map((m) => `${m.p.ref}=S-${m.s.id}`).join(', ')}); they start within seconds. I will report the real result of each. Nothing is published until then.${skippedRefs.length ? ` Skipped (no longer available): ${skippedRefs.join(', ')}.` : ''}`;
+    },
+    async execute() { throw new Error('status_batch runs only via confirmation'); },
   },
 };
 module.exports = { scheduleActions, planLabel, pretty, daysLabel };

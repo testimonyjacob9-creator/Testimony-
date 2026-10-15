@@ -70,7 +70,22 @@ function titleFor(f, fallbackText) {
   return String(fallbackText || '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
 }
 
-const REQUIRED = [['location', 'location'], ['price', 'price'], ['listing', 'sale or rent'], ['contact', 'contact number']];
-const missingFields = (p) => REQUIRED.filter(([k]) => p[k] === null || p[k] === undefined || p[k] === '').map(([, label]) => label);
+/** General item (not real estate): title = the owner's own caption words; only a clearly stated price/phone is extracted. */
+function extractItem(caption) {
+  const raw = String(caption || '').trim();
+  const out = {};
+  const price = parsePrice(raw); if (price) out.price = price;
+  const m = raw.match(PHONE); if (m) out.contact = `0${m[1]}${m[2]}${m[3]}`;
+  let title = raw.replace(PHONE_G, ' ');
+  if (price) title = title.replace(/(?:₦|\bNGN\s?|\bN(?=\s?\d)|#(?=\d))\s?\d[\d,]*(?:\.\d+)?\s*(?:billion|bn|b|million|mil|m|thousand|k)?(?![a-z])|\d[\d,]*(?:\.\d+)?\s*(?:billion|million|thousand)\b/i, ' ');
+  if (out.contact) title = title.replace(/\b(?:call|contact|whatsapp|phone|tel|text)(?:\s+(?:me|us|on))?[\s:.\-–|]*$/i, ' ');
+  title = title.replace(/\s+/g, ' ').replace(/^[\s,;:.\-–|]+|[\s,;:.\-–|]+$/g, '').slice(0, 80);
+  out.title = title || raw.slice(0, 80) || null;
+  return out;
+}
 
-module.exports = { extract, parsePrice, looksLikeProperty, titleFor, missingFields, PHONE };
+const REQUIRED = [['location', 'location'], ['price', 'price'], ['listing', 'sale or rent'], ['contact', 'contact number']];
+const REQUIRED_ITEM = [['price', 'price'], ['contact', 'contact number']];
+const missingFields = (p) => (p.ptype === 'item' ? REQUIRED_ITEM : REQUIRED).filter(([k]) => p[k] === null || p[k] === undefined || p[k] === '').map(([, label]) => label);
+
+module.exports = { extractItem, extract, parsePrice, looksLikeProperty, titleFor, missingFields, PHONE };
