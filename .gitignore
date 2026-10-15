@@ -4,10 +4,10 @@ node_modules/
 !.env.example
 data/*
 !data/.gitkeep
-auth_session/
-auth_state/
-media/
-backups/
+/auth_session/
+/auth_state/
+/media/
+/backups/
 *.log
 *.sqlite
 *.sqlite-wal
