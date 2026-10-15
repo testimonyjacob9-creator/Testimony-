@@ -92,6 +92,7 @@ class Assistant {
 
   async _handle(msg) {
     const auth = authorizeOwner(msg, this.config);
+    this.logger?.debug({ chatKind: /@lid$/.test(msg.chat || '') ? 'lid' : /@s\.whatsapp\.net$/.test(msg.chat || '') ? 'pn' : /@g\.us$/.test(msg.chat || '') ? 'group' : 'other', fromMe: !!msg.fromMe, chatIsSelf: msg.chatIsSelf === true, hasFrom: !!msg.from, hasMedia: !!msg.media, allowed: auth.allowed, reason: auth.reason }, 'inbound message');
     if (!auth.allowed) { this._noteRejected(msg, auth.reason); return { handled: false, reason: auth.reason }; }
     const text = (msg.text || '').trim();
     if (this.sentIds.has(msg.id) || text.startsWith(PREFIX)) return { handled: false, reason: 'own_message' };

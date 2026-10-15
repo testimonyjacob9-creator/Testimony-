@@ -198,6 +198,7 @@ class BaileysProvider extends WhatsAppProvider {
   }
 
   async _onUpsert({ messages, type }) {
+    this.logger?.debug({ type, count: Array.isArray(messages) ? messages.length : 0, hasSelfPhone: !!this.self.phone, hasSelfLid: !!this.self.lid }, 'messages.upsert');
     if (!this._handler || !Array.isArray(messages)) return;
     if (type !== 'notify' && type !== 'append') return;
     for (const raw of messages) {
