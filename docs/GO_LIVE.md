@@ -1,5 +1,7 @@
 # Final setup before the FIRST real WhatsApp connection (awaiting your explicit approval)
 
+> Hosting on Render? Use docs/RENDER.md for deployment and pairing; come back here for the supervised verification checklist below.
+
 Nothing in this project has ever connected to real WhatsApp. The connection is made **by you, on your own machine**, with `npm start`. It cannot be made from the development sandbox. Do not start it until you have read this and decided to proceed.
 
 ## What "self" mode means for you (your own existing number)

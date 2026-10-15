@@ -76,13 +76,16 @@ function loadConfig(env = process.env) {
     throw err;
   }
 
-  const dataDir = path.resolve(env.DATA_DIR || './data');
+  // On Render the persistent disk is mounted at /var/data (render.yaml). Default to it there so a missing DATA_DIR can never
+  // silently put the database and WhatsApp session on the ephemeral filesystem. Locally the default stays ./data.
+  const onRender = String(env.RENDER || '').toLowerCase() === 'true';
+  const dataDir = path.resolve(env.DATA_DIR || (onRender ? '/var/data' : './data'));
   return Object.freeze({
     ownerPhone, provider, timezone, accountMode, botPhone, ownerLid,
     proposalTtlMs: Math.floor(ttl * 60 * 1000), mediaAckDelayMs: ackDelay, scheduleMaxAttempts: maxAttempts, scheduleRetryDelayMs: Math.floor(retryDelay * 1000), missedRunGraceMs: Math.floor(grace * 60000),
     groupSendDelayMs: Math.floor(delaySec * 1000), maxGroupsPerCampaign: maxGroups, groupDedupeMs: Math.floor(dedupeHours * 3600 * 1000),
     logLevel: env.LOG_LEVEL || 'info',
-    dataDir,
+    dataDir, onRender,
     authDir: path.join(dataDir, 'auth_state'),
     dbPath: path.join(dataDir, 'assistant.sqlite'),
     mediaDir: path.join(dataDir, 'media'),

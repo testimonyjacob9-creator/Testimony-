@@ -5,7 +5,7 @@ const { loadConfig } = require('../src/config');
 const { createAi } = require('../src/ai');
 (async () => {
   let config;
-  try { config = loadConfig({ ...process.env, OWNER_PHONE: '2340000000000' }); } catch (e) { console.error(e.message); process.exit(2); }
+  try { config = loadConfig({ ...process.env, OWNER_PHONE: process.env.OWNER_PHONE || '2340000000000' }); } catch (e) { console.error(e.message); process.exit(2); }
   const ai = createAi(config);
   if (!ai.enabled) { console.log(`AI is OFF: ${ai.reason}.`); process.exit(1); }
   const h = await ai.client.health();

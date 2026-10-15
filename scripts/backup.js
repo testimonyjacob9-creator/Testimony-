@@ -23,8 +23,9 @@ function backup({ dataDir, dest, withSession = false }) {
 
 if (require.main === module) {
   require('dotenv').config();
-  const dataDir = path.resolve(process.env.DATA_DIR || './data');
-  const out = backup({ dataDir, dest: path.resolve(process.env.BACKUP_DIR || './backups'), withSession: process.argv.includes('--with-session') });
+  // Same default as src/config.js. Backups go inside DATA_DIR so that on Render they land on the persistent disk, not the ephemeral app directory.
+  const dataDir = path.resolve(process.env.DATA_DIR || (String(process.env.RENDER || '').toLowerCase() === 'true' ? '/var/data' : './data'));
+  const out = backup({ dataDir, dest: path.resolve(process.env.BACKUP_DIR || path.join(dataDir, 'backups')), withSession: process.argv.includes('--with-session') });
   console.log(`Backup written to ${out}\nTo restore: stop the assistant, copy assistant.sqlite and media/ back into ${dataDir}, start it again.`);
 }
 module.exports = { backup };

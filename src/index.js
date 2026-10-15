@@ -29,12 +29,32 @@ function silenceSignalNoise() {
   }
 }
 
+/**
+ * On Render only a mounted disk survives restarts. A directory on the same filesystem device as `/` is ephemeral:
+ * the database, WhatsApp session and media would silently vanish on the next deploy. Returns a warning string or null.
+ */
+function persistenceWarning(config, fsApi = fs) {
+  if (!config.onRender) return null;
+  try {
+    const here = fsApi.statSync(config.dataDir).dev;
+    const root = fsApi.statSync('/').dev;
+    if (here === root) return `DATA_DIR (${config.dataDir}) is on the ephemeral filesystem, not a mounted disk: your database and WhatsApp login WILL BE LOST on the next deploy. Attach the persistent disk at /var/data (see docs/RENDER.md).`;
+  } catch { return `Could not inspect DATA_DIR (${config.dataDir}) to confirm it is a persistent disk.`; }
+  return null;
+}
+
 async function main() {
   silenceSignalNoise();
   let config;
   try { config = loadConfig(); } catch (e) { console.error(e.message); process.exit(1); }
   const logger = createLogger(config.logLevel);
   fs.mkdirSync(config.mediaDir, { recursive: true, mode: 0o700 });
+  const diskWarning = persistenceWarning(config);
+  if (diskWarning) logger.error(diskWarning);
+  if (config.onRender && config.provider === 'mock') logger.warn('WHATSAPP_PROVIDER=mock on Render: nothing is sent or received. Set WHATSAPP_PROVIDER=baileys to run the real bot (docs/RENDER.md).');
+  // A stray rejection from a library must not kill a healthy WhatsApp session; log the message only (never the object).
+  process.on('unhandledRejection', (r) => logger.error({ err: String(r && r.message || r).slice(0, 200) }, 'unhandled promise rejection (ignored)'));
+  process.on('uncaughtException', (e) => { logger.error({ err: String(e && e.message || e).slice(0, 200) }, 'uncaught exception; exiting so Render restarts the service'); process.exit(1); });
 
   const db = openDatabase(config.dbPath);
   const instanceId = newInstanceId();
@@ -73,4 +93,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
-module.exports = { main, SIGNAL_NOISE };
+module.exports = { main, SIGNAL_NOISE, persistenceWarning };

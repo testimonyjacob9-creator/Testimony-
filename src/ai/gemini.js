@@ -34,6 +34,10 @@ function extractText(resp) {
   return Array.isArray(parts) ? parts.map((p) => p.text || '').join('') : '';
 }
 
+// Gemini 3.x models may spend part of maxOutputTokens on internal reasoning. Without headroom a small cap can come back
+// empty and look like an outage, so every call gets this many extra tokens on top of the visible-answer budget.
+const THINKING_HEADROOM = 1024;
+
 class GeminiClient {
   /**
    * @param {{apiKey:string, model:string, timeoutMs:number, dailyLimit:number}} cfg
@@ -66,7 +70,7 @@ class GeminiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.cfg.timeoutMs);
     try {
-      const config = { temperature, maxOutputTokens: maxTokens, abortSignal: controller.signal, httpOptions: { timeout: this.cfg.timeoutMs } };
+      const config = { temperature, maxOutputTokens: maxTokens + THINKING_HEADROOM, abortSignal: controller.signal, httpOptions: { timeout: this.cfg.timeoutMs } };
       if (system) config.systemInstruction = system;
       if (json) config.responseMimeType = 'application/json';
       const resp = await this._ai().models.generateContent({ model: this.cfg.model, contents: prompt, config });
@@ -93,7 +97,7 @@ class GeminiClient {
   async health() {
     const started = Date.now();
     try {
-      const out = await this.generateJson({ system: 'Reply with JSON only.', prompt: 'Return {"ok":true}', maxTokens: 30, temperature: 0 });
+      const out = await this.generateJson({ system: 'Reply with JSON only.', prompt: 'Return {"ok":true}', maxTokens: 60, temperature: 0 });
       if (!out || out.ok !== true) return { ok: false, code: 'AI_BAD_OUTPUT', message: 'Gemini answered, but not in the expected format', model: this.model };
       return { ok: true, model: this.model, latencyMs: Date.now() - started };
     } catch (e) { return { ok: false, code: e.code || 'AI_UNAVAILABLE', message: e.message, model: this.model }; }
@@ -101,4 +105,4 @@ class GeminiClient {
   status() { return { model: this.model, requestsToday: this.usage.count, dailyLimit: this.cfg.dailyLimit, lastOk: this.lastOk, lastError: this.lastError }; }
 }
 
-module.exports = { GeminiClient, AiError, scrub, classify };
+module.exports = { GeminiClient, AiError, scrub, classify, THINKING_HEADROOM };

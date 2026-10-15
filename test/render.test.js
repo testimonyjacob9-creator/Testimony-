@@ -11,14 +11,16 @@ const root = path.join(__dirname, '..');
 const yaml = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
 const pkg = require('../package.json');
 
-test('render.yaml: persistent disk, DATA_DIR on the disk, one instance, no secrets, WhatsApp stays mock', () => {
+test('render.yaml: persistent disk, DATA_DIR on the disk, one instance, no secrets, real WhatsApp provider (not mock) in self mode', () => {
   const mount = yaml.match(/mountPath:\s*(\S+)/)[1];
   assert.equal(mount, '/var/data');
   assert.match(yaml, new RegExp(`key: DATA_DIR[^\\n]*\\n\\s+value: ${mount}`));
   assert.match(yaml, /numInstances:\s*1\b/);
   assert.match(yaml, /type: worker/);
   assert.match(yaml, /startCommand: npm start/);
-  assert.match(yaml, /key: WHATSAPP_PROVIDER\s+value: mock/);
+  assert.match(yaml, /key: WHATSAPP_PROVIDER\s+value: baileys/);
+  assert.doesNotMatch(yaml, /value: mock/);
+  assert.match(yaml, /key: ACCOUNT_MODE\s+value: self/);
   for (const k of ['GEMINI_API_KEY', 'OWNER_PHONE']) assert.match(yaml, new RegExp(`key: ${k}[^\\n]*\\n\\s+sync: false`));
   assert.doesNotMatch(yaml, /AIza[0-9A-Za-z_-]{10,}/);
   const node = yaml.match(/key: NODE_VERSION\s+value: ([\d.]+)/)[1];
@@ -29,7 +31,7 @@ test('render.yaml: persistent disk, DATA_DIR on the disk, one instance, no secre
 test('render env: DATA_DIR drives SQLite, WhatsApp session and media consistently', () => {
   const c = loadConfig({ OWNER_PHONE: '+2347065702702', DATA_DIR: '/var/data', GEMINI_API_KEY: 'k' });
   assert.equal(c.dbPath, '/var/data/assistant.sqlite'); assert.equal(c.authDir, '/var/data/auth_state'); assert.equal(c.mediaDir, '/var/data/media');
-  assert.equal(c.ownerPhone, '2347065702702'); assert.equal(c.provider, 'mock'); assert.equal(c.timezone, 'Africa/Lagos');
+  assert.equal(c.ownerPhone, '2347065702702'); assert.equal(c.provider, 'mock'); // code default; render.yaml sets baileys assert.equal(c.timezone, 'Africa/Lagos');
   assert.equal(c.ai.enabled, true);
 });
 test('secrets are not committed: .env ignored, example has an empty key, no key-like strings in tracked sources', () => {
@@ -72,6 +74,7 @@ test('process: starts in mock mode, STAYS running, and shuts down gracefully on 
   const started = Date.now();
   while (!/assistant started/.test(out) && Date.now() - started < 10000) await new Promise((r) => setTimeout(r, 50));
   assert.match(out, /assistant started/);
+  assert.match(out, /off: GEMINI_API_KEY is not set/, 'missing key: starts safely and says AI is unavailable');
   await new Promise((r) => setTimeout(r, 1500));
   assert.equal(child.exitCode, null, 'service must not exit by itself');
   const exited = new Promise((r) => child.on('exit', (code) => r(code)));

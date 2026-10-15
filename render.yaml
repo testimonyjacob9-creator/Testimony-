@@ -1,39 +1,32 @@
-# Render Blueprint for OLIVES. One always-on background worker + one persistent disk.
-# Persistent disks require a PAID Render instance type; on the free tier files vanish on every deploy/restart.
-# Secrets are NOT in this file: Render asks for every `sync: false` value in the dashboard.
+# Render Blueprint for OLIVES: one always-on background worker + one persistent disk.
+# A worker needs no HTTP port or health check: it holds the WhatsApp connection and runs the schedulers.
+# Persistent disks need a PAID instance type; on a free instance the database and WhatsApp login vanish on every deploy.
+# Secrets are NOT in this file: Render asks for each `sync: false` value in the dashboard.
+# Everything else (timezone Africa/Lagos, Gemini model, AI limits, log level, media/auth/database paths) has a safe default in code.
 services:
   - type: worker
     name: olives-assistant
     runtime: node
-    plan: starter          # smallest paid type; a disk is not available on free instances
+    plan: starter          # smallest paid type; disks are not available on free instances
     numInstances: 1        # MUST stay 1: one WhatsApp session + one SQLite file + one scheduler
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     disk:
       name: olives-data
-      mountPath: /var/data
+      mountPath: /var/data   # SQLite, auth_state/ (WhatsApp login) and media/ all live here
       sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: 22.13.0
-      - key: DATA_DIR            # SQLite DB, WhatsApp auth_state and media all live under here
+      - key: DATA_DIR            # must equal disk.mountPath
         value: /var/data
-      - key: TIMEZONE
-        value: Africa/Lagos
-      - key: OWNER_PHONE         # e.g. 2347065702702 (digits only)
+      - key: OWNER_PHONE         # you enter it: 2347065702702 (digits only)
         sync: false
-      - key: AI_ENABLED
-        value: "true"
-      - key: AI_PROVIDER
-        value: gemini
-      - key: GEMINI_API_KEY      # paste in the Render dashboard only; never commit it
+      - key: GEMINI_API_KEY      # you enter it in the dashboard only; never commit it
         sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3.8-flash
-      - key: AI_DAILY_REQUEST_LIMIT
-        value: "300"
-      # Stays "mock" (sends nothing) until you explicitly approve going live: see docs/GO_LIVE.md.
+      # Fixed settings (not secrets): the real WhatsApp connection, running on the owner's own number.
+      # Nothing connects until YOU type the pairing code into your phone (docs/RENDER.md, section "First-time pairing").
       - key: WHATSAPP_PROVIDER
-        value: mock
+        value: baileys
       - key: ACCOUNT_MODE
         value: self
