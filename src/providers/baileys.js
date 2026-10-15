@@ -93,7 +93,7 @@ class BaileysProvider extends WhatsAppProvider {
   onContacts(h) { this._contactsHandler = h; }
   connectionState() { return this.state; }
   capabilities() {
-    return { sendText: true, sendMedia: false, publishStatus: false, statusVerification: false, groups: true, receiveMedia: false };
+    return { sendText: true, sendMedia: false, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
   }
   _set(s) { if (this.state !== s) { this.state = s; try { this._stateHandler(s); } catch (e) { this.logger?.error({ err: e.message }, 'state handler failed'); } } }
 
@@ -220,7 +220,24 @@ class BaileysProvider extends WhatsAppProvider {
     } catch (e) { return { ok: false, verified: false, error: e.message }; }
   }
   async sendMedia() { return { ok: false, verified: false, error: 'media sending is not implemented yet (Phase 3/4)' }; }
-  async publishStatus() { return { ok: false, verified: false, error: 'status publishing is not implemented yet (Phase 4)' }; }
+  /**
+   * Post to WhatsApp Status. `recipients` (phone JIDs) is MANDATORY: the library encrypts the post to exactly that list.
+   * Media is read from a local file path. Returns verified:false always: there is no way to read a Status back.
+   */
+  async publishStatus({ text, imagePath, videoPath, caption, recipients } = {}) {
+    if (this.state !== 'connected' || !this.sock) return { ok: false, verified: false, error: 'not connected' };
+    if (!Array.isArray(recipients) || !recipients.length) return { ok: false, verified: false, error: 'no recipients' };
+    try {
+      let content; const options = { statusJidList: recipients };
+      if (imagePath) content = { image: { url: imagePath }, ...(caption ? { caption } : {}) };
+      else if (videoPath) content = { video: { url: videoPath }, ...(caption ? { caption } : {}) };
+      else if (text) { content = { text }; options.backgroundColor = '#1f6f5c'; options.font = 1; }
+      else return { ok: false, verified: false, error: 'nothing to post' };
+      const res = await this.sock.sendMessage('status@broadcast', content, options);
+      return { ok: true, id: res?.key?.id, verified: false };
+    } catch (e) { return { ok: false, verified: false, error: e.message }; }
+  }
+  selfJid() { return this.self.jid || null; }
   /** The privacy MODE only (e.g. "contacts"); WhatsApp does not expose the exception lists through this library. */
   async getStatusPrivacy() {
     if (this.state !== 'connected' || !this.sock) return { ok: false, error: 'not connected' };

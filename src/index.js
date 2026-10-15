@@ -8,6 +8,7 @@ const { createProvider } = require('./providers');
 const { Assistant } = require('./assistant');
 const { Scheduler } = require('./scheduler');
 const { CampaignRunner } = require('./groups/campaigns');
+const { ScheduleRunner } = require('./schedule/runner');
 
 async function main() {
   let config;
@@ -20,18 +21,20 @@ async function main() {
   const assistant = new Assistant({ db, provider, config, logger });
   const scheduler = new Scheduler({ ctx: assistant.ctx });
   const campaigns = new CampaignRunner({ ctx: assistant.ctx });
+  const schedRunner = new ScheduleRunner({ ctx: assistant.ctx });
   assistant.start();
   scheduler.start();
   campaigns.start();
+  schedRunner.start();
   await provider.connect();
   audit(db, 'system', 'startup', 'ok');
-  logger.info({ provider: config.provider, tz: config.timezone }, 'assistant started (Phase 2)');
+  logger.info({ provider: config.provider, tz: config.timezone }, 'assistant started');
 
   let stopping = false;
   const shutdown = async (sig) => {
     if (stopping) return; stopping = true;
     logger.info({ sig }, 'shutting down');
-    try { scheduler.stop(); campaigns.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); db.close(); } finally { process.exit(0); }
+    try { scheduler.stop(); campaigns.stop(); schedRunner.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); db.close(); } finally { process.exit(0); }
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

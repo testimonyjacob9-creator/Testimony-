@@ -12,6 +12,7 @@ const { CampaignStore } = require('./groups/campaigns');
 const { AudienceStore } = require('./status/audience');
 const { PropertyStore } = require('./properties/store');
 const { MediaStore } = require('./media/store');
+const { ScheduleStore } = require('./schedule/store');
 const { looksLikeProperty } = require('./properties/parse');
 const { parseFilters } = require('./properties/commands');
 
@@ -26,17 +27,19 @@ const HELP = `${PREFIX} *Commands*
 /pause [for 2 hours | until tomorrow] - pause scheduled automation
 /resume - resume automation
 /groups - list your groups (+ select, selected, remove, clear, enable, disable)
+/schedule - recurring posts (list, pause, resume, cancel, history) | /routine - morning briefing
 /audience - who can receive your Status posts
 /properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
 /advert <text> - draft an advert for your approved groups (needs your yes)
 
 *You can also just type*, e.g.
 "Remind me to call the buyer at 4 PM"
+"Post this property every morning at 8 AM"
 "Show me tomorrow's tasks"
 "Don't post anything today"
 
 Every action is drafted first. Nothing runs until you reply *yes*.
-Coming later: Status posts, schedules, leads.`;
+Coming later: leads and follow-ups.`;
 
 /** Provider-independent command layer. Depends only on the WhatsAppProvider interface. */
 class Assistant {
@@ -48,6 +51,7 @@ class Assistant {
     this.audience = new AudienceStore(db, clock);
     this.properties = new PropertyStore(db, clock);
     this.media = new MediaStore({ db, config, clock });
+    this.schedules = new ScheduleStore(db, clock);
     this.mediaAck = new Map(); this.mediaAckTimer = null;
     this.ownerJid = `${config.ownerPhone}@s.whatsapp.net`;
     this.prefix = PREFIX;
@@ -60,6 +64,7 @@ class Assistant {
   start() {
     this.restored = this.store.recoverRunning();
     this.interrupted = this.campaigns.recoverInterrupted();
+    this.interruptedRuns = this.schedules.recoverInterrupted();
     // Never let a handler failure escape into the provider's event loop.
     this.provider.onMessage((m) => this.handleInbound(m).catch((e) => this.logger?.error({ err: e.message }, 'inbound handler failed')));
     this.provider.onConnectionChange((s) => this.onConnectionChange(s));
@@ -73,7 +78,8 @@ class Assistant {
       const open = this.store.listOpen().length;
       const p = getPause(this.db, this.clock());
       const warn = this.interrupted ? ` WARNING: ${this.interrupted} group send(s) were interrupted by the restart and their outcome is unknown (see /advert status).` : '';
-      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}.${warn} Send /help.`;
+      const warn2 = this.interruptedRuns ? ` WARNING: ${this.interruptedRuns} scheduled run(s) were interrupted by the restart; their outcome is unknown, please check your Status (/schedule history).` : '';
+      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}.${warn}${warn2} Send /help.`;
       this._send(this.ownerJid, text).catch(() => {});
     }
   }
@@ -164,13 +170,19 @@ class Assistant {
       case 'property_edit': { const r = this._resolveProperty(it.text); return r.property ? this.propertyEdit(r.property, it.field, it.value) : this._refError(r); }
       case 'property_delete': { const r = this._resolveProperty(it.text, { allowActive: false }); return r.property ? this.propertyDelete(r.property) : this._refError(r); }
       case 'caption': { const r = this._resolveProperty(it.text); return r.property ? this.captionReply(r.property, it.style) : this._refError(r); }
+      case 'schedule_create': return this.proposeSchedule(it);
+      case 'schedule_edit': return it.draft && proposal && proposal.kind === 'schedule_create' ? this.scheduleDraftEdit(it, proposal) : this.scheduleEditExisting(it);
+      case 'schedule_pause': return this.schedulePause(it.text);
+      case 'schedule_resume': return this.scheduleResume(it.text);
+      case 'schedule_cancel': return this.scheduleCancel(it.text);
+      case 'schedule_list': return this.scheduleList(it);
       case 'pause': return this.pause(it.until, now);
       case 'resume': return this.resume();
       case 'cancel': return this.cancel(it, proposal, now);
       case 'tasks': return this.tasks(it, now);
       case 'status': return this.status(now);
       case 'help': return HELP;
-      case 'unsupported': return `I can't do that yet: ${it.feature} arrives in Phase ${it.phase}. Nothing was posted or sent. Right now I handle reminders, /tasks, /pause and /resume.`;
+      case 'unsupported': if (it.custom) return it.custom; return `I can't do that yet: ${it.feature} arrives in Phase ${it.phase}. Nothing was posted or sent. Right now I handle reminders, properties, Status posts and group adverts.`;
       case 'empty': return HELP;
       default: {
         if (looksLikeProperty(text)) return this.propertyIntake(text);
@@ -191,13 +203,14 @@ class Assistant {
       case 'cancel': return this.cancel({ id: (args.match(/(\d+)/) || [])[1] ? Number(args.match(/(\d+)/)[1]) : null, all: /^all\b/i.test(args) }, this.store.activeProposal(), now);
       case 'pause': return this.pause(require('./nlp/intent').parsePauseUntil(args, now, this.config.timezone), now);
       case 'resume': return this.resume();
+      case 'schedule': return this.scheduleCommand(args);
+      case 'routine': return this.routineCommand(args);
       case 'audience': return this.audienceCommand(args);
       case 'groups': return this.groupsCommand(args);
       case 'advert': return this.advertCommand(args);
       case 'properties': { const m = args.match(/^page\s+(\d+)$/i); return m ? this.propertyList({}, Number(m[1])) : this.propertyList(args ? { text: args } : {}); }
       case 'property': return this.propertyCommand(args);
       case 'caption': { const parts = args.trim().split(/\s+/); const st = ['short', 'long', 'standard'].includes((parts[parts.length - 1] || '').toLowerCase()) ? parts.pop().toLowerCase() : 'all'; const r = this._resolveProperty(parts.join(' ')); return r.property ? this.captionReply(r.property, st) : this._refError(r); }
-      case 'schedule': return 'Daily schedules arrive in Phase 7. Reminders you set now are already persistent: see /tasks.';
       case 'settings': return 'Settings arrive in a later phase. Current: timezone ' + this.config.timezone + '.';
       default: return `Unknown command /${name}. Send /help.`;
     }
@@ -283,13 +296,25 @@ class Assistant {
     }
     const p = getPause(this.db, now);
     const head = p.paused ? `Automation PAUSED${p.until ? ' until ' + this._fmt(p.until) : ''}.\n` : '';
+    let sched = '';
+    if (it.day && !it.approvalsOnly) {
+      const key = localDateKey(it.day === 'today' ? now : new Date(now.getTime() + 86400000), this.config.timezone);
+      const iso = (d) => { const p = require('./nlp/time').localParts(d, this.config.timezone); return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`; };
+      const dayIso = iso(it.day === 'today' ? now : new Date(now.getTime() + 86400000));
+      const occ = this.schedules.list(['active']).filter((x) => this.schedules.occursOn(x, dayIso));
+      if (occ.length) sched = `
+*Scheduled posts (${occ.length})*
+${occ.map((x) => this._schedLine(x)).join('\n')}`;
+      void key;
+    }
+    if (!list.length && sched) return `${head}${sched.trim()}`;
     if (!list.length) return `${head}No ${it.approvalsOnly ? 'drafts awaiting approval' : 'open tasks'}${it.day ? ' for ' + it.day : ''}.`;
     const lines = list.map((t) => {
       const when = t.run_at ? this._fmt(new Date(t.run_at)) : 'n/a';
       const state = t.status === 'proposed' ? 'AWAITING YOUR APPROVAL' : 'scheduled';
       return `T-${t.id} ${t.kind}: ${t.title} | ${when} | ${state}`;
     });
-    return `${head}*Open tasks (${list.length})*\n${lines.join('\n')}`;
+    return `${head}*Open tasks (${list.length})*\n${lines.join('\n')}${sched}`;
   }
 
   pause(until, now) {
@@ -318,12 +343,14 @@ Time: ${this._fmt(now)} (${this.config.timezone})
 Uptime: ${Math.floor(up / 60)}h ${up % 60}m
 Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.approved().length} approved group(s))
 Properties: ${this.properties.list({}).length} saved
-Not built yet: Status posting, scheduling, leads`;
+Schedules: ${this.schedules.list(['active']).length} active, ${this.schedules.list(['paused']).length} paused
+Not built yet: leads and follow-ups`;
   }
 }
 
 Object.assign(Assistant.prototype, require('./groups/commands'));
 Object.assign(Assistant.prototype, require('./status/commands'));
+Object.assign(Assistant.prototype, require('./schedule/commands'));
 const propertyMixin = { ...require('./properties/commands') }; delete propertyMixin.parseFilters;
 Object.assign(Assistant.prototype, propertyMixin);
 

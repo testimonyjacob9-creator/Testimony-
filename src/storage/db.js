@@ -123,6 +123,54 @@ const MIGRATIONS = [
       );
       ALTER TABLE campaigns ADD COLUMN property_id INTEGER;`,
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        property_id INTEGER NOT NULL REFERENCES properties(id),
+        destination TEXT NOT NULL CHECK (destination IN ('status','groups')),
+        kind TEXT NOT NULL CHECK (kind IN ('daily','days','once')),
+        time_local TEXT NOT NULL,
+        days TEXT,
+        once_date TEXT,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        timezone TEXT NOT NULL,
+        group_jids TEXT,
+        status TEXT NOT NULL CHECK (status IN ('active','paused','cancelled','completed')),
+        pause_reason TEXT,
+        next_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_sched_due ON schedules(status, next_run_at);
+      -- One row per schedule per local date: the database itself prevents a duplicate run.
+      CREATE TABLE schedule_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        schedule_id INTEGER NOT NULL REFERENCES schedules(id),
+        run_date TEXT NOT NULL,
+        scheduled_for TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        status TEXT NOT NULL CHECK (status IN ('running','retry','success','queued','partial','failed','skipped','unknown')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT,
+        detail TEXT,
+        recipients INTEGER,
+        UNIQUE (schedule_id, run_date)
+      );
+      CREATE TABLE schedule_run_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER NOT NULL REFERENCES schedule_runs(id),
+        position INTEGER NOT NULL,
+        ref TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','sending','sent','failed','unknown','skipped')),
+        detail TEXT,
+        message_id TEXT,
+        UNIQUE (run_id, position)
+      );`,
+  },
 ];
 
 function openDatabase(dbPath) {

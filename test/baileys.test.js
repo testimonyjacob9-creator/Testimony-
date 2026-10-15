@@ -155,11 +155,30 @@ test('sendText: refuses when disconnected, builds JID, reports failures honestly
   assert.deepEqual(await p.sendText(OWNER, 'hello'), { ok: false, verified: false, error: 'rate-overlimit' });
 });
 
-test('unimplemented features are reported as unsupported, never faked', async () => {
+test('capabilities are honest: Status is supported but never verifiable; media sending is still unsupported', async () => {
   const { p } = await open('self');
-  assert.equal(p.capabilities().publishStatus, false);
-  assert.equal((await p.publishStatus({})).ok, false);
+  const c = p.capabilities();
+  assert.equal(c.publishStatus, true); assert.equal(c.statusVerification, false); assert.equal(c.sendMedia, false);
   assert.equal((await p.sendMedia('x', {})).ok, false);
+  assert.deepEqual(await p.publishStatus({ text: 'hi', recipients: [] }), { ok: false, verified: false, error: 'no recipients' });
+  assert.deepEqual(await p.publishStatus({ recipients: ['1@s.whatsapp.net'] }), { ok: false, verified: false, error: 'nothing to post' });
+});
+
+test('publishStatus builds the right Baileys call: status@broadcast, statusJidList, local file path, caption; verified is always false', async () => {
+  const { p, sock } = await open('self');
+  const calls = [];
+  sock.sendMessage = async (jid, content, options) => { calls.push({ jid, content, options }); return { key: { id: `st-${calls.length}` } }; };
+  const rec = ['2348000000001@s.whatsapp.net', `${OWNER}@s.whatsapp.net`];
+  const a = await p.publishStatus({ imagePath: '/data/media/PROP-001/a.jpg', caption: 'cap', recipients: rec });
+  const b = await p.publishStatus({ videoPath: '/data/media/PROP-001/b.mp4', recipients: rec });
+  const c = await p.publishStatus({ text: 'plain text', recipients: rec });
+  assert.deepEqual([a.ok, a.id, a.verified], [true, 'st-1', false]);
+  assert.deepEqual(calls[0], { jid: 'status@broadcast', content: { image: { url: '/data/media/PROP-001/a.jpg' }, caption: 'cap' }, options: { statusJidList: rec } });
+  assert.deepEqual(calls[1].content, { video: { url: '/data/media/PROP-001/b.mp4' } });
+  assert.equal(calls[2].content.text, 'plain text'); assert.deepEqual(calls[2].options.statusJidList, rec);
+  assert.ok(b.ok && c.ok && !b.verified && !c.verified);
+  sock.sendMessage = async () => { throw new Error('media upload failed'); };
+  assert.deepEqual(await p.publishStatus({ text: 'x', recipients: rec }), { ok: false, verified: false, error: 'media upload failed' });
 });
 
 test('upsert routing: live messages delivered, old appended history dropped, handler errors contained', async () => {

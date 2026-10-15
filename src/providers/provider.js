@@ -13,7 +13,13 @@ class WhatsAppProvider {
   /** @param {(state:string)=>void} handler */ onConnectionChange(handler) { throw new Error('not implemented'); }
   async sendText(jid, text) { throw new Error('not implemented'); }
   async sendMedia(jid, media) { throw new Error('not implemented'); }
+  /**
+   * @param {{text?:string, imagePath?:string, videoPath?:string, caption?:string, recipients:string[]}} content
+   * @returns {Promise<{ok:boolean,id?:string,verified:false,error?:string}>} verified is ALWAYS false for Status.
+   */
   async publishStatus(content) { throw new Error('not implemented'); }
+  /** The connected account's own JID, if known. */
+  selfJid() { return null; }
   /**
    * @returns {Promise<{ok:boolean, groups:{id:string,name:string,size:number|null,canSend:boolean|null,isMember:boolean}[], error?:string}>}
    * Must never fabricate groups: on failure return ok:false with an empty list.

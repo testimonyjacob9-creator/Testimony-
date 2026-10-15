@@ -14,6 +14,8 @@ class MockProvider extends WhatsAppProvider {
     this.listError = null;
     this._contactsHandler = () => {};
     this.statusPrivacy = { ok: true, mode: 'contacts' };
+    this.statusErrors = [];
+    this.selfJidValue = null;
     this._handler = null;
     this._stateHandler = () => {};
   }
@@ -29,6 +31,7 @@ class MockProvider extends WhatsAppProvider {
     return null;
   }
   setGroups(list) { this.groups = list; }
+  selfJid() { return this.selfJidValue; }
   onContacts(h) { this._contactsHandler = h; }
   simulateContacts(list) { this._contactsHandler(list); }
   async getStatusPrivacy() { return this.statusPrivacy; }
@@ -47,9 +50,11 @@ class MockProvider extends WhatsAppProvider {
   }
   async publishStatus(content) {
     const bad = this._guard(); if (bad) return bad;
+    if (!content || !Array.isArray(content.recipients) || !content.recipients.length) return { ok: false, verified: false, error: 'no recipients' };
+    if (this.statusErrors.length) return { ok: false, verified: false, error: this.statusErrors.shift() };
     const id = `mock-status-${this.statuses.length + 1}`;
     this.statuses.push({ id, content });
-    return { ok: true, id, verified: false }; // mock cannot truly verify, mirrors real limits
+    return { ok: true, id, verified: false }; // a Status can never be verified: acceptance only
   }
   async listGroups() {
     if (this.state !== 'connected') return { ok: false, groups: [], error: 'not connected' };

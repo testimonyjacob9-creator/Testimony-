@@ -37,5 +37,6 @@ const actions = {
 
 Object.assign(actions, require('./registry-groups').groupActions);
 Object.assign(actions, require('./registry-properties').propertyActions);
+Object.assign(actions, require('./registry-schedules').scheduleActions);
 
 module.exports = { actions };

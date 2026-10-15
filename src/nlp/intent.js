@@ -1,6 +1,7 @@
 'use strict';
 const { parseWhen, atLocalDay, nextLocalMidnight } = require('./time');
 const { looksLikeProperty } = require('../properties/parse');
+const { interpretSchedule } = require('./schedule');
 
 const CONFIRM = /^(yes|y|yep|yeah|yup|confirm(ed)?|ok(ay)?|go ahead|do it|proceed|sure|post it|send it|approve(d)?)[.! ]*$/i;
 const DENY = /^(no|n|nope|nah|discard|abort|never ?mind|forget it|don'?t|do not)[.! ]*$/i;
@@ -30,7 +31,6 @@ const P_CAPTION = /\bcaptions?\b/i;
 const AUDIENCE = /\b(status audience|who (can|will) see my status|status recipients)\b/i;
 const C_STOP = /\b(stop|cancel|abort)\b.*\b(campaign|advert(isement)?|sending|group posts?)\b/i;
 const UNSUPPORTED = [
-  [/\b(status|story|post)\b/i, 'Status posting', 4],
   
   [/\b(buyer|seller|lead|client|follow ?up)\b/i, 'Lead management', 6],
 ];
@@ -88,6 +88,9 @@ function interpret(text, st) {
   if (DENY.test(raw)) return { intent: 'deny' };
   const rm = raw.match(/\bremind me\b\s*(?:to\s+|about\s+|that\s+)?([\s\S]*)$/i);
   if (rm) return reminderSlots(rm[1], st, null);
+  if (/\bchannels?\b/i.test(raw) && /\b(post|send|publish|share|schedule|promote)\b/i.test(raw)) return { intent: 'unsupported', custom: 'Posting to WhatsApp Channels is DISABLED: it has not been shown to work reliably with this WhatsApp library (see docs/DESTINATIONS.md). Nothing was posted or scheduled. I can post to your Status or your approved groups instead.' };
+  const sch = interpretSchedule(raw, st);
+  if (sch) return sch;
   if (st.proposalKind === 'campaign' && !splitAdvert(raw).text) {
     if (C_ONLY.test(raw)) return { intent: 'campaign_retarget', mode: 'only', numbers: extractNumbers(raw) };
     if (C_ADD.test(raw)) return { intent: 'campaign_retarget', mode: 'add', numbers: extractNumbers(raw) };
@@ -127,6 +130,7 @@ function interpret(text, st) {
     if (w && w.error) return { intent: 'modify_time', problem: 'past' };
     if (w) return { intent: 'modify_time', when: w };
   }
+  if (raw.length < 120 && /\b(buyer|seller|lead|client|prospect)\b/i.test(raw)) return { intent: 'unsupported', feature: 'Lead management', phase: 6 };
   // Long free text that is not phrased as an instruction is content (e.g. an advert), not a feature request.
   const looksLikeInstruction = /^\s*(please\s+)?(post|send|publish|share|schedule|promote|add|create|show)\b/i.test(raw);
   if (raw.length < 40 || looksLikeInstruction) {

@@ -15,9 +15,10 @@ test('mock provider reports injected failures and never claims status verificati
   await p.connect();
   p.failNext = 'boom';
   assert.equal((await p.sendText('x', 'hi')).error, 'boom');
-  const s = await p.publishStatus({ text: 'hello' });
+  const s = await p.publishStatus({ text: 'hello', recipients: ['2348000000001@s.whatsapp.net'] });
   assert.equal(s.ok, true);
   assert.equal(s.verified, false);
+  assert.equal((await p.publishStatus({ text: 'hello', recipients: [] })).error, 'no recipients', 'never post a Status with nobody to see it');
 });
 
 test('logger redacts message content and secrets', () => {

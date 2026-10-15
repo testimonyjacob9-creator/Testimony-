@@ -13,26 +13,12 @@ Status legend: [x] done, [ ] todo
 - [x] Pending-action store, confirm/cancel/modify, persistent scheduler
 - [ ] Supervised live connection by the owner
 
-## Phase 3 - Properties [ ]
-Intake from text/media, structured records with PROP-### IDs, edit/search/mark sold, caption variants.
-
-## Phase 4 - Status publishing [ ]
-Preview/confirm, dedupe, history, honest `verified` reporting. Blocks sold properties.
-
-## Phase 5 - Group campaigns [~] partially done
-- [x] Discovery, pagination, allowlist (stable JIDs), enable switch, confirmed adverts, pacing, dedupe, partial-failure reporting, restart safety (docs/GROUPS.md)
-- [ ] Property-linked adverts, media adverts, per-group templates (need Phase 3)
-- [ ] Scheduled group adverts (Phase 7)
-- Channels: intentionally disabled (docs/DESTINATIONS.md)
-
-## Phase 6 - Leads/CRM [ ]
-Leads, stages, follow-ups, drafted replies (never auto-sent).
-
-## Phase 7 - Scheduler [ ]
-Persistent jobs in SQLite, Africa/Lagos, daily plan, briefings, recurring pre-authorized tasks.
-
-## Phase 8 - Hardening [ ]
-Failure-scenario tests, backup/restore, optional dashboard, deployment guide.
+## Phase 3 - Properties and media [x] tested with mocks
+## Phase 4 - Status publishing [x] tested with mocks (visibility can never be verified)
+## Phase 5 - Group campaigns [x] text adverts, property-linked, scheduled; [ ] media to groups
+## Phase 6 - Leads / CRM [ ] not started
+## Phase 7 - Scheduler, routine, briefing [x] tested with mocks
+## Phase 8 - Hardening [~] backup script, deployment guide done; [ ] dashboard; [ ] live verification
 
 ## Next exact step
-Owner chooses ACCOUNT_MODE and runs the first supervised live connection; then Phase 3 (properties). See docs/HANDOVER.md.
+Owner approves and supervises the first live connection (docs/GO_LIVE.md); then fix what reality shows. See docs/HANDOVER.md.

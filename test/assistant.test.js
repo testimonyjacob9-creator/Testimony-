@@ -145,10 +145,11 @@ test('/pause and /resume persist; natural language pause understood', async () =
 
 test('unbuilt features are refused honestly, never faked', async () => {
   const s = await connected();
-  const r = (await s.send('Post this property on my status now')).replies[0];
+  const r = (await s.send('Save this person as a buyer interested in land in Ekpoma')).replies[0];
   assert.match(r, /can't do that yet/);
   assert.match(r, /Nothing was posted or sent/);
   assert.equal(s.provider.statuses.length, 0);
+  assert.equal(s.assistant.properties.list({}).length, 0, 'a buyer note must not become a property');
 });
 
 test('invalid / unknown input does nothing', async () => {

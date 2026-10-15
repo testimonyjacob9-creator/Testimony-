@@ -39,6 +39,12 @@ function loadConfig(env = process.env) {
   const dedupeHours = Number(env.GROUP_DEDUPE_HOURS || 24);
   if (!Number.isFinite(dedupeHours) || dedupeHours < 0 || dedupeHours > 720) errors.push('GROUP_DEDUPE_HOURS must be 0-720');
 
+  const maxAttempts = Number(env.SCHEDULE_MAX_ATTEMPTS ?? 2);
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) errors.push('SCHEDULE_MAX_ATTEMPTS must be an integer 1-5');
+  const retryDelay = Number(env.SCHEDULE_RETRY_DELAY_SECONDS ?? 120);
+  if (!Number.isFinite(retryDelay) || retryDelay < 0 || retryDelay > 3600) errors.push('SCHEDULE_RETRY_DELAY_SECONDS must be 0-3600');
+  const grace = Number(env.MISSED_RUN_GRACE_MINUTES ?? 120);
+  if (!Number.isFinite(grace) || grace < 0 || grace > 1440) errors.push('MISSED_RUN_GRACE_MINUTES must be 0-1440');
   const ackDelay = Number(env.MEDIA_ACK_DELAY_MS ?? 3000);
   if (!Number.isFinite(ackDelay) || ackDelay < 0 || ackDelay > 60000) errors.push('MEDIA_ACK_DELAY_MS must be 0-60000');
 
@@ -61,7 +67,7 @@ function loadConfig(env = process.env) {
   const dataDir = path.resolve(env.DATA_DIR || './data');
   return Object.freeze({
     ownerPhone, provider, timezone, accountMode, botPhone, ownerLid,
-    proposalTtlMs: Math.floor(ttl * 60 * 1000), mediaAckDelayMs: ackDelay,
+    proposalTtlMs: Math.floor(ttl * 60 * 1000), mediaAckDelayMs: ackDelay, scheduleMaxAttempts: maxAttempts, scheduleRetryDelayMs: Math.floor(retryDelay * 1000), missedRunGraceMs: Math.floor(grace * 60000),
     groupSendDelayMs: Math.floor(delaySec * 1000), maxGroupsPerCampaign: maxGroups, groupDedupeMs: Math.floor(dedupeHours * 3600 * 1000),
     logLevel: env.LOG_LEVEL || 'info',
     dataDir,
