@@ -21,7 +21,7 @@ function planLabel(plan) {
   if (plan.kind === 'days') return `${pretty(plan.time)}, ${daysLabel(plan.days)}`;
   return `${pretty(plan.time)} once, on ${plan.onceDate}`;
 }
-const DEAD = ['sold', 'rented', 'unavailable'];
+const DEAD = ['sold', 'rented', 'unavailable', 'withdrawn'];
 
 function duplicateOf(ctx, p, destination, plan) {
   return ctx.schedules.forProperty(p.id).find((s) => ['active', 'paused'].includes(s.status) && s.destination === destination && s.time_local === plan.time && s.kind === plan.kind && !plan.immediate);

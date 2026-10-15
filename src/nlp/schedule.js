@@ -93,9 +93,10 @@ function interpretSchedule(raw, st) {
   const end = parseEndDate(t, st.now, st.tz);
 
   if (/\b(cancel|stop|delete|remove|end)\b[^.]*\b(schedules?|recurring)\b/.test(t) || (sid && /\b(cancel|stop|delete|remove)\b/.test(t))
-    || /\bstop posting\b\s+(?!all\b|anything\b|everything\b|scheduled\b|for\b)\S/.test(t)
     || /\bcancel\b[^.]*\b(morning|afternoon|evening|night)\b[^.]*\b(posts?|status)\b/.test(t)) return { intent: 'schedule_cancel', text: raw };
   if (/\bpause\b/.test(t) && (sid || scope.test(t))) return { intent: 'schedule_pause', text: raw };
+  // "Stop posting that phone" pauses (reversible); permanent removal needs an explicit cancel/delete.
+  if (/\bstop (?:posting|advertising)\b\s+(?!all\b|anything\b|everything\b|scheduled\b|for\b)\S/.test(t)) return { intent: 'schedule_pause', text: raw };
   if (/\b(resume|unpause|restart)\b/.test(t) && (sid || /\b(morning|afternoon|evening|night|schedules?|prop-?\s?\d+|property|posts?|apartment|house)\b/.test(t))) return { intent: 'schedule_resume', text: raw };
   if (/\b(show|list|view|display|what('| i)?s)\b/.test(t) && /\b(schedules?|scheduled posts?|recurring posts?)\b/.test(t)) return { intent: 'schedule_list', text: raw, day: /\btomorrow\b/.test(t) ? 'tomorrow' : /\btoday\b/.test(t) ? 'today' : null };
 

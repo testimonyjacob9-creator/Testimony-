@@ -1,5 +1,5 @@
 'use strict';
-const FIELDS = ['title', 'location', 'ptype', 'listing', 'price', 'bedrooms', 'bathrooms', 'land_size', 'features', 'facilities', 'documentation', 'contact', 'agent', 'description', 'caption'];
+const FIELDS = ['title', 'location', 'ptype', 'listing', 'price', 'bedrooms', 'bathrooms', 'land_size', 'features', 'facilities', 'documentation', 'contact', 'agent', 'description', 'caption', 'category', 'currency', 'item_condition', 'quantity', 'specs'];
 
 class PropertyStore {
   constructor(db, clock = () => new Date()) { this.db = db; this.clock = clock; }

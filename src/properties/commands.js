@@ -6,7 +6,7 @@ const { getSetting, setSetting, deleteSetting } = require('../storage/settings')
 
 const ACTIVE_MS = 2 * 3600000;
 const ORD = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
-const STOP = new Set(['the', 'a', 'an', 'my', 'this', 'that', 'it', 'property', 'properties', 'show', 'post', 'stop', 'posting', 'old', 'new', 'of', 'in', 'for', 'to', 'mark', 'as', 'delete', 'remove', 'and', 'please', 'prepare', 'captions', 'caption', 'different', 'three', 'set', 'change', 'update', 'edit', 'price', 'title', 'location', 'contact', 'phone', 'bedrooms', 'bedroom', 'bathrooms', 'bathroom', 'description', 'listing', 'sold', 'rented', 'unavailable', 'available', 'flag', 'also', 'with', 'from', 'are', 'was', 'has', 'been', 'now', 'number', 'details', 'view', 'open']);
+const STOP = new Set(['the', 'a', 'an', 'my', 'this', 'that', 'it', 'property', 'properties', 'show', 'post', 'stop', 'posting', 'old', 'new', 'of', 'in', 'for', 'to', 'mark', 'as', 'delete', 'remove', 'and', 'please', 'prepare', 'captions', 'caption', 'different', 'three', 'set', 'change', 'update', 'edit', 'price', 'title', 'location', 'contact', 'phone', 'bedrooms', 'bedroom', 'bathrooms', 'bathroom', 'description', 'listing', 'sold', 'rented', 'unavailable', 'available', 'reserved', 'withdrawn', 'flag', 'also', 'with', 'from', 'are', 'was', 'has', 'been', 'now', 'number', 'details', 'view', 'open']);
 const FIELD_ALIAS = { phone: 'contact', bedroom: 'bedrooms', bathroom: 'bathrooms' };
 
 module.exports = {
@@ -255,7 +255,7 @@ module.exports = {
     if (lower === 'done') return this.propertyDone();
     const first = lower.split(/\s+/)[0];
     const rest = a.slice(first.length).trim();
-    if (['sold', 'rented', 'unavailable', 'available'].includes(first)) { const r = this._resolveProperty(rest); return r.property ? this.propertyStatusChange(r.property, first) : this._refError(r); }
+    if (['sold', 'rented', 'unavailable', 'available', 'reserved', 'withdrawn'].includes(first)) { const r = this._resolveProperty(rest); return r.property ? this.propertyStatusChange(r.property, first) : this._refError(r); }
     if (first === 'delete') { const r = this._resolveProperty(rest, { allowActive: false }); return r.property ? this.propertyDelete(r.property) : this._refError(r); }
     if (first === 'set') {
       const m = rest.match(/^(\S+)\s+(\S+)\s+([\s\S]+)$/);
@@ -274,7 +274,7 @@ module.exports.parseFilters = function parseFilters(text) {
   if ((m = t.match(/\b(?:below|under|less than|max(?:imum)?|cheaper than)\s+([₦#N]?\s?[\d.,]+\s?(?:million|billion|thousand|m|k|b)?)/i))) { const v = parsePrice(m[1], { loose: true }); if (v) f.maxPrice = v; }
   if ((m = t.match(/\b(?:above|over|more than|at least|min(?:imum)?)\s+([₦#N]?\s?[\d.,]+\s?(?:million|billion|thousand|m|k|b)?)/i))) { const v = parsePrice(m[1], { loose: true }); if (v) f.minPrice = v; }
   if ((m = t.match(/\bin\s+([A-Za-z][A-Za-z'-]+)/i)) && !/^(stock|the|my|total|all)$/i.test(m[1])) f.location = m[1];
-  if ((m = t.match(/\b(available|sold|rented|unavailable|draft)\b/i))) f.status = m[1].toLowerCase();
+  if ((m = t.match(/\b(available|sold|rented|unavailable|reserved|withdrawn|draft)\b/i))) f.status = m[1].toLowerCase();
   const ex = extract(t.replace(/\bproperties\b/gi, ' ')); if (ex.ptype) f.ptype = ex.ptype; if (ex.bedrooms) f.bedrooms = ex.bedrooms;
   return f;
 };

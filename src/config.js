@@ -57,6 +57,18 @@ function loadConfig(env = process.env) {
   const dashboardEnabled = String(env.DASHBOARD_ENABLED || 'false').toLowerCase() === 'true';
   if (dashboardEnabled && (env.DASHBOARD_TOKEN || '').length < 16) errors.push('DASHBOARD_TOKEN (16+ chars) is required when DASHBOARD_ENABLED=true');
 
+  // --- AI (Gemini). Enabled by default when a key is configured; the key itself is never validated for shape here.
+  const aiProvider = (env.AI_PROVIDER || 'gemini').toLowerCase();
+  if (aiProvider !== 'gemini') errors.push('AI_PROVIDER must be "gemini"');
+  const geminiKey = (env.GEMINI_API_KEY || '').trim();
+  const aiFlag = env.AI_ENABLED === undefined || env.AI_ENABLED === '' ? null : String(env.AI_ENABLED).toLowerCase();
+  if (aiFlag !== null && !['true', 'false'].includes(aiFlag)) errors.push('AI_ENABLED must be "true" or "false"');
+  const aiWanted = aiFlag === null ? true : aiFlag === 'true';
+  const aiTimeout = Number(env.AI_TIMEOUT_MS ?? 20000);
+  if (!Number.isFinite(aiTimeout) || aiTimeout < 1000 || aiTimeout > 120000) errors.push('AI_TIMEOUT_MS must be 1000-120000');
+  const aiDailyLimit = Number(env.AI_DAILY_REQUEST_LIMIT ?? 300);
+  if (!Number.isInteger(aiDailyLimit) || aiDailyLimit < 1 || aiDailyLimit > 100000) errors.push('AI_DAILY_REQUEST_LIMIT must be an integer 1-100000');
+
   if (errors.length) {
     const err = new Error('Invalid configuration:\n - ' + errors.join('\n - '));
     err.code = 'CONFIG_INVALID';
@@ -77,6 +89,13 @@ function loadConfig(env = process.env) {
     maxMediaBytes: Math.floor(maxMediaMb * 1024 * 1024),
     dashboardEnabled,
     dashboardToken: env.DASHBOARD_TOKEN || '',
+    ai: Object.freeze({
+      requested: aiWanted, provider: aiProvider, apiKey: geminiKey,
+      enabled: aiWanted && !!geminiKey,
+      disabledReason: !aiWanted ? 'AI_ENABLED=false' : (!geminiKey ? 'GEMINI_API_KEY is not set' : null),
+      model: (env.GEMINI_MODEL || 'gemini-3.8-flash').trim(),
+      timeoutMs: Math.floor(aiTimeout), dailyLimit: aiDailyLimit,
+    }),
   });
 }
 

@@ -4,9 +4,9 @@ An owner-controlled WhatsApp assistant for property marketing, status posting, a
 
 ## Current status: all planned features implemented and tested with mocks; NOT yet connected to real WhatsApp
 
-| Tested (mock provider / fake Baileys socket, 183 tests) | Not built / not verified |
+| Tested (mock provider / fake Baileys socket / mocked Gemini, 222 tests) | Not built / not verified |
 |---|---|
-| Owner-only chat commands, reminders, drafts -> confirm -> execute, property intake and records, safe media storage, captions, Status audience capture, **recurring Status schedules** (daily / selected days / one-time / now), morning routine + briefing, group selection and confirmed group adverts, scheduled group adverts, pause/resume/cancel/edit, missed-run and restart recovery, duplicate prevention, retries, honest reports, backup script | **Any live WhatsApp connection**, Status visibility (cannot be verified at all), Channels (deliberately disabled), photos/videos to groups, leads/follow-ups, dashboard |
+| Owner-only chat commands, **Gemini-powered natural-language understanding and advert writing (validated, confirmation-gated)**, universal listings (statuses incl. reserved/withdrawn), single-instance guard, Render blueprint, reminders, drafts -> confirm -> execute, property intake and records, safe media storage, captions, Status audience capture, **recurring Status schedules** (daily / selected days / one-time / now), morning routine + briefing, group selection and confirmed group adverts, scheduled group adverts, pause/resume/cancel/edit, missed-run and restart recovery, duplicate prevention, retries, honest reports, backup script | **Any live WhatsApp connection**, **any live Gemini call (needs your key; run `/ai check`)**, Status visibility (cannot be verified at all), Channels (deliberately disabled), photos/videos to groups, leads/follow-ups, dashboard |
 
 Read first: [docs/HANDOVER.md](docs/HANDOVER.md), then [docs/GO_LIVE.md](docs/GO_LIVE.md) (final setup; waiting for your approval).
 
@@ -16,6 +16,7 @@ npm install
 cp .env.example .env     # set OWNER_PHONE
 npm test
 npm run backup           # consistent backup of records + media
+npm run ai:check         # real Gemini round trip (needs GEMINI_API_KEY)
 npm run dev:chat         # talk to the assistant in your terminal (mock, sends nothing)
 npm start                # mock by default; real WhatsApp needs docs/ACCOUNT_SETUP.md
 ```
@@ -41,6 +42,11 @@ Requires Node >= 22.13 (uses built-in `node:sqlite`, no native build needed).
 | LOG_LEVEL | no | info | pino level |
 | DATA_DIR | no | ./data | SQLite DB and private media (git-ignored) |
 | MAX_MEDIA_MB | no | 50 | Media size cap |
+| AI_ENABLED | no | true if key set | `false` forces the AI helper off |
+| AI_PROVIDER | no | gemini | only `gemini` |
+| GEMINI_API_KEY | for AI | - | secret: .env (ignored) or Render dashboard only |
+| GEMINI_MODEL | no | gemini-3.8-flash | any supported Gemini model id |
+| AI_DAILY_REQUEST_LIMIT / AI_TIMEOUT_MS | no | 300 / 20000 | spend safety cap / per-call timeout |
 | DASHBOARD_ENABLED / DASHBOARD_TOKEN | no | false | Phase 8 dashboard; token 16+ chars if enabled |
 
 ## Documentation
@@ -49,6 +55,7 @@ Requires Node >= 22.13 (uses built-in `node:sqlite`, no native build needed).
 - [docs/SCHEDULING.md](docs/SCHEDULING.md) - recurring posts, morning routine, guarantees
 - [docs/PROPERTIES.md](docs/PROPERTIES.md) - property intake, captions, media storage
 - [docs/STATUS_AUDIENCE.md](docs/STATUS_AUDIENCE.md) - how Status recipients are obtained and the limits
+- [docs/RENDER.md](docs/RENDER.md) - **production deployment on Render** (persistent disk, one instance, Gemini key, costs)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) - always-on hosting, backups, recovery
 - [docs/GROUPS.md](docs/GROUPS.md) - group selection and adverts: commands, safety rules, limits
 - [docs/DESTINATIONS.md](docs/DESTINATIONS.md) - audit of groups / Status / Channels / media and deployment needs

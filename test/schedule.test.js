@@ -142,8 +142,10 @@ test('"Stop posting the old apartment" resolves by words, asks when ambiguous', 
   await activate(s, 'Post PROP-001 every morning at 8 AM'); await activate(s, 'Post PROP-002 every evening at 6 PM');
   const amb = text(await s.send('Stop posting the apartment'));
   assert.match(amb, /More than one property matches/);
-  assert.match(text(await s.send('Stop posting the Uromi apartment')), /Cancelled S-1/);
+  assert.match(text(await s.send('Stop posting the Uromi apartment')), /Paused S-1/);
+  assert.equal(sched(s, 1).status, 'paused'); // reversible: "stop posting" pauses, only an explicit cancel is permanent
   assert.equal(sched(s, 2).status, 'active');
+  assert.match(text(await s.send('Cancel S-1')), /Cancelled S-1/);
 });
 
 test('change the time: existing schedule by words, by id, and the draft before activation; ambiguity is asked', async () => {

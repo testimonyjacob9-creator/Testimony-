@@ -6,6 +6,8 @@ const { createLogger } = require('./logger');
 const { openDatabase, audit } = require('./storage/db');
 const { createProvider } = require('./providers');
 const { Assistant } = require('./assistant');
+const { createAi } = require('./ai');
+const { acquireLease, renewLease, releaseLease, newInstanceId } = require('./storage/lease');
 const { Scheduler } = require('./scheduler');
 const { CampaignRunner } = require('./groups/campaigns');
 const { ScheduleRunner } = require('./schedule/runner');
@@ -35,8 +37,16 @@ async function main() {
   fs.mkdirSync(config.mediaDir, { recursive: true, mode: 0o700 });
 
   const db = openDatabase(config.dbPath);
+  const instanceId = newInstanceId();
+  try { await acquireLease(db, instanceId); } catch (e) { console.error(e.message); process.exit(1); }
+  let leaseLost = false;
+  const lease = setInterval(() => {
+    try { if (!renewLease(db, instanceId)) { leaseLost = true; logger.error('lost the instance lease to another process; shutting down to avoid double-posting'); shutdown('LEASE_LOST'); } } catch (e) { logger.warn({ err: e.message }, 'lease renewal failed'); }
+  }, 15000); // deliberately NOT unref'd: this heartbeat also keeps the service alive (the mock provider holds no socket)
   const provider = createProvider(config, logger);
-  const assistant = new Assistant({ db, provider, config, logger });
+  const ai = createAi(config, logger);
+  logger.info({ ai: ai.enabled ? `configured (${ai.model})` : `off: ${ai.reason}` }, 'AI helper');
+  const assistant = new Assistant({ db, provider, config, logger, ai });
   const scheduler = new Scheduler({ ctx: assistant.ctx });
   const campaigns = new CampaignRunner({ ctx: assistant.ctx });
   const schedRunner = new ScheduleRunner({ ctx: assistant.ctx });
@@ -55,7 +65,8 @@ async function main() {
   const shutdown = async (sig) => {
     if (stopping) return; stopping = true;
     logger.info({ sig }, 'shutting down');
-    try { scheduler.stop(); campaigns.stop(); schedRunner.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); db.close(); } finally { process.exit(0); }
+    clearInterval(lease); clearInterval(noiseTimer);
+    try { scheduler.stop(); campaigns.stop(); schedRunner.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); if (!leaseLost) releaseLease(db, instanceId); db.close(); } finally { process.exit(0); }
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

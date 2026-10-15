@@ -7,7 +7,7 @@ const { audit } = require('../storage/db');
 const { getSetting, setSetting } = require('../storage/settings');
 const { getPause } = require('../tasks/pause');
 
-const DEAD = ['sold', 'rented', 'unavailable'];
+const DEAD = ['sold', 'rented', 'unavailable', 'withdrawn'];
 const period = (s) => { const h = Number(s.time_local.slice(0, 2)); return h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night'; };
 
 module.exports = {

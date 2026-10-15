@@ -32,6 +32,7 @@ const HELP = `${PREFIX} *Commands*
 /contact <number> - save your contact number for new items
 /properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
 /advert <text> - draft an advert for your approved groups (needs your yes)
+/briefing - business update | /ai - AI helper status (/ai check tests it)
 
 *You can also just type*, e.g.
 "Remind me to call the buyer at 4 PM"
@@ -44,7 +45,8 @@ Coming later: leads and follow-ups.`;
 
 /** Provider-independent command layer. Depends only on the WhatsAppProvider interface. */
 class Assistant {
-  constructor({ db, provider, config, clock = () => new Date(), logger }) {
+  constructor({ db, provider, config, clock = () => new Date(), logger, ai = null }) {
+    this.ai = ai;
     this.db = db; this.provider = provider; this.config = config; this.clock = clock; this.logger = logger;
     this.store = new TaskStore(db, clock);
     this.groups = new GroupStore(db, clock);
@@ -60,7 +62,7 @@ class Assistant {
     this.queue = Promise.resolve();
     this.startedAt = clock(); this.announced = false; this.restored = 0;
   }
-  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, audience: this.audience, properties: this.properties, media: this.media, schedules: this.schedules, provider: this.provider, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
+  get ctx() { return { db: this.db, store: this.store, groups: this.groups, campaigns: this.campaigns, audience: this.audience, properties: this.properties, media: this.media, schedules: this.schedules, provider: this.provider, assistant: this, ai: this.ai, config: this.config, clock: this.clock, logger: this.logger, ownerJid: this.ownerJid, prefix: PREFIX }; }
 
   start() {
     this.restored = this.store.recoverRunning();
@@ -104,12 +106,16 @@ class Assistant {
     if (msg.media) return this._handleMedia(msg);
     if (!text) return { handled: false, reason: 'empty' };
     let reply;
+    let activeBefore = null;
+    try { activeBefore = this._activeProperty(); } catch { /* storage may be the failure */ }
     try { reply = await this.process(text); }
     catch (e) {
       this.logger?.error({ err: e.message }, 'command failed');
       try { audit(this.db, 'owner', 'command', 'error', e.message.slice(0, 200)); } catch { /* storage may be the failure */ }
       reply = `Something went wrong and the request was NOT completed (${e.message}). Nothing was changed.`;
     }
+    this._recordTurn('owner', text, activeBefore ? activeBefore.id : null);
+    this._recordTurn('assistant', reply);
     await this._send(msg.chat, reply.startsWith(PREFIX) ? reply : `${PREFIX} ${reply}`);
     return { handled: true };
   }
@@ -150,6 +156,8 @@ class Assistant {
     const now = this.clock();
     const proposal = this.store.activeProposal();
     const awaiting = this._conversation();
+    const pick = String(text).match(/^\s*(?:use|pick|choose|go with)\s+(?:option\s+|version\s+)?(\d)\s*[.!]?\s*$/i);
+    if (pick && proposal && proposal.kind === 'ai_caption') return this.aiCaptionChoose(Number(pick[1]), proposal);
     const bm = String(text).match(/^\s*post\s+(all|these|the\s+new|new)\s+(?:available\s+)?(?:(?:items|listings|products)\s+)?(?:on|to)\s+(?:my\s+)?status(?:\s+now)?\s*[.!]?\s*$/i);
     if (bm) return this.proposeStatusBatch(/^all$/i.test(bm[1]) ? 'all' : 'new');
     const it = interpret(text, { now, tz: this.config.timezone, awaiting, proposalKind: proposal && proposal.kind, hasActiveProperty: !!this._activeProperty() });
@@ -190,6 +198,8 @@ class Assistant {
       case 'empty': return HELP;
       default: {
         if (looksLikeProperty(text)) return this.propertyIntake(text);
+        const hi = this.greeting(text, now); if (hi) return hi;
+        const ai = await this.aiInterpret(text, now); if (ai) return ai.text;
         if (text.length >= 40) {
           setSetting(this.db, 'candidate_content', { text, at: now.toISOString() });
           return `I didn't recognise that as a command, so I did nothing. I kept it for 30 min in case it is an advert: say "send this to my approved groups" and I'll prepare a draft (nothing is sent without your confirmation).`;
@@ -216,6 +226,8 @@ class Assistant {
       case 'properties': { const m = args.match(/^page\s+(\d+)$/i); return m ? this.propertyList({}, Number(m[1])) : this.propertyList(args ? { text: args } : {}); }
       case 'property': return this.propertyCommand(args);
       case 'caption': { const parts = args.trim().split(/\s+/); const st = ['short', 'long', 'standard'].includes((parts[parts.length - 1] || '').toLowerCase()) ? parts.pop().toLowerCase() : 'all'; const r = this._resolveProperty(parts.join(' ')); return r.property ? this.captionReply(r.property, st) : this._refError(r); }
+      case 'briefing': return this.businessBriefing(now);
+      case 'ai': return this.aiCommand(args);
       case 'settings': return 'Settings arrive in a later phase. Current: timezone ' + this.config.timezone + '.';
       default: return `Unknown command /${name}. Send /help.`;
     }
@@ -349,10 +361,13 @@ Uptime: ${Math.floor(up / 60)}h ${up % 60}m
 Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.approved().length} approved group(s))
 Properties: ${this.properties.list({}).length} saved
 Schedules: ${this.schedules.list(['active']).length} active, ${this.schedules.list(['paused']).length} paused
+AI helper: ${this.ai && this.ai.enabled ? 'configured (/ai check to test)' : 'OFF'}
 Not built yet: leads and follow-ups`;
   }
 }
 
+const aiMixin = { ...require('./ai/commands') }; delete aiMixin.adViolation;
+Object.assign(Assistant.prototype, aiMixin);
 Object.assign(Assistant.prototype, require('./groups/commands'));
 Object.assign(Assistant.prototype, require('./status/commands'));
 Object.assign(Assistant.prototype, require('./schedule/commands'));

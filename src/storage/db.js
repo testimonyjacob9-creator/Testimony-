@@ -171,6 +171,43 @@ const MIGRATIONS = [
         UNIQUE (run_id, position)
       );`,
   },
+  {
+    version: 7,
+    // Universal listings: widen the status set (reserved, withdrawn) and add category-neutral columns.
+    // SQLite cannot alter a CHECK constraint, so the table is rebuilt (documented SQLite procedure, FKs off).
+    foreignKeysOff: true,
+    sql: `
+      CREATE TABLE properties_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ref TEXT NOT NULL UNIQUE,
+        title TEXT, location TEXT, ptype TEXT,
+        listing TEXT CHECK (listing IS NULL OR listing IN ('sale','rent','lease')),
+        price INTEGER, bedrooms INTEGER, bathrooms INTEGER, land_size TEXT,
+        features TEXT, facilities TEXT, documentation TEXT, contact TEXT, agent TEXT,
+        description TEXT, caption TEXT,
+        status TEXT NOT NULL CHECK (status IN ('draft','available','reserved','sold','rented','unavailable','withdrawn')),
+        received_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+        category TEXT, currency TEXT NOT NULL DEFAULT 'NGN', item_condition TEXT, quantity INTEGER, specs TEXT
+      );
+      INSERT INTO properties_new (id,ref,title,location,ptype,listing,price,bedrooms,bathrooms,land_size,features,facilities,documentation,contact,agent,description,caption,status,received_at,updated_at,deleted_at)
+        SELECT id,ref,title,location,ptype,listing,price,bedrooms,bathrooms,land_size,features,facilities,documentation,contact,agent,description,caption,status,received_at,updated_at,deleted_at FROM properties;
+      DROP TABLE properties;
+      ALTER TABLE properties_new RENAME TO properties;
+      UPDATE properties SET category = CASE WHEN ptype = 'item' THEN 'general' ELSE 'property' END WHERE category IS NULL;`,
+  },
+  {
+    version: 8,
+    sql: `
+      -- Short, bounded conversation memory (what was said, what was resolved). Pruned by the application.
+      CREATE TABLE conversation_turns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('owner','assistant')),
+        text TEXT NOT NULL,
+        property_id INTEGER
+      );
+      CREATE INDEX idx_turns_at ON conversation_turns(id);`,
+  },
 ];
 
 function openDatabase(dbPath) {
@@ -186,12 +223,15 @@ function migrate(db) {
   const applied = new Set(db.prepare('SELECT version FROM schema_migrations').all().map((r) => r.version));
   for (const m of MIGRATIONS) {
     if (applied.has(m.version)) continue;
+    if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF'); // must be set outside a transaction
     db.exec('BEGIN');
     try {
       db.exec(m.sql);
+      if (m.foreignKeysOff) { const bad = db.prepare('PRAGMA foreign_key_check').all(); if (bad.length) throw new Error('migration left dangling foreign keys'); }
       db.prepare('INSERT INTO schema_migrations (version) VALUES (?)').run(m.version);
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
+    finally { if (m.foreignKeysOff) db.exec('PRAGMA foreign_keys = ON'); }
   }
 }
 

@@ -9,9 +9,11 @@
     "start": "node src/index.js",
     "test": "node --test \"test/*.test.js\"",
     "dev:chat": "node scripts/dev-chat.js",
-    "backup": "node scripts/backup.js"
+    "backup": "node scripts/backup.js",
+    "ai:check": "node scripts/ai-check.js"
   },
   "dependencies": {
+    "@google/genai": "^2.30.0",
     "baileys": "7.0.0-rc14",
     "dotenv": "^16.4.5",
     "pino": "^9.0.0"

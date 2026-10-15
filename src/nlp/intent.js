@@ -23,7 +23,7 @@ const C_ADD = /\b(add|include)\b.*\bgroups?\b/i;
 const C_REMOVE = /\b(remove|exclude|skip|drop)\b.*\bgroups?\b/i;
 const P_LIST = /\b(show|list|see|view|display)\b.*\bproperties\b|^\s*properties\s*$/i;
 const P_SHOW = /\b(show|view|open|details?)\b.*(\b(?:apartment|flat|duplex|bungalow|house|land|plot|shop|office|room|villa|mansion)\b|\bprop-?\s?\d+\b|\bproperty\s+(?:number\s+)?\d+\b|\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:property|one)\b)/i;
-const P_STATUS = /\b(mark|set|flag)\b.*\b(sold|rented|unavailable|available)\b|\b(?:prop-?\s?\d+|property\s+\d+)\b.*\b(?:is|has been|was)\s+(?:now\s+)?(sold|rented|unavailable|available)\b/i;
+const P_STATUS = /\b(mark|set|flag)\b.*\b(sold|rented|unavailable|available|reserved|withdrawn)\b|\b(?:prop-?\s?\d+|property\s+\d+)\b.*\b(?:is|has been|was)\s+(?:now\s+)?(sold|rented|unavailable|available|reserved|withdrawn)\b/i;
 const P_EDIT = /\b(?:change|update|set|edit)\b\s+(?:the\s+)?(?:(?:prop-?\s?\d+|property\s+\d+|this)\s+)?(price|title|location|contact|phone|bedrooms?|bathrooms?|description|caption|listing)\b(?:\s+of\s+[\w\s-]+?)?\s+(?:to|as)\s+([\s\S]+)$/i;
 const P_DELETE = /\b(delete|remove|discard)\b.*\b(prop-?\s?\d+|property|draft)\b/i;
 const P_DONE = /^\s*(done|save( it)?|that'?s all|finished|all done)\s*[.!]*$/i;
@@ -98,7 +98,7 @@ function interpret(text, st) {
   }
   if (P_DONE.test(raw)) return { intent: 'property_done' };
   if (P_EDIT.test(raw)) { const m = raw.match(P_EDIT); return { intent: 'property_edit', field: m[1], value: m[2], text: raw.slice(0, raw.length - m[2].length) }; }
-  if (P_STATUS.test(raw)) { const m = raw.match(/\b(sold|rented|unavailable|available)\b/i); return { intent: 'property_status', status: m[1].toLowerCase(), text: raw }; }
+  if (P_STATUS.test(raw)) { const m = raw.match(/\b(sold|rented|unavailable|available|reserved|withdrawn)\b/i); return { intent: 'property_status', status: m[1].toLowerCase(), text: raw }; }
   if (P_DELETE.test(raw)) return { intent: 'property_delete', text: raw };
   if (P_CAPTION.test(raw)) { const t = raw.toLowerCase(); return { intent: 'caption', style: /\bshort\b/.test(t) ? 'short' : /\b(long|detailed)\b/.test(t) ? 'long' : 'all', text: raw }; }
   if (P_SHOW.test(raw)) return { intent: 'property_show', text: raw };

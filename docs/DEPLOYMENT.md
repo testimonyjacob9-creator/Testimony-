@@ -1,3 +1,5 @@
+> **Production = Render. See [RENDER.md](RENDER.md).** The notes below are general always-on hosting background; Termux is for testing only.
+
 # Deployment
 
 ## What it needs

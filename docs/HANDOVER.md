@@ -47,3 +47,12 @@ Add a new confirmed action by registering it in src/tasks/registry-*.js (`descri
 1. Owner reads docs/GO_LIVE.md, decides, and runs the supervised first connection (self mode). Report anything that differs from the tests.
 2. Fix whatever the real connection reveals (likely: LID handling, contact sync volume, Status behaviour).
 3. Only after step 1 works: consider photos/videos to groups, leads/follow-ups (Phase 6), dashboard (Phase 8).
+
+
+## Update: AI + Render milestone (verified state)
+* Starting point actually found: commit `981b2fa`, 189 passing tests (not the 6909f80 / 183 mentioned in the brief; the local clone was shallow so that hash was not available).
+* Added: Gemini provider via official `@google/genai` (`src/ai/`), `/ai` + `/ai check` + `npm run ai:check`, AI fallback for unrecognised messages, advert generation with fact guard and approval, persistent bounded conversation memory (`conversation_turns`), `/briefing`, universal listing columns + `reserved`/`withdrawn` statuses (migrations 7-8, rows preserved), single-instance lease, `render.yaml`, `docs/RENDER.md`.
+* Behaviour change on purpose: "Stop posting X" now PAUSES (reversible); permanent removal needs "cancel".
+* Tests: 222 passing, all with mocks; no real WhatsApp, no Gemini credits used.
+* NOT verified: a live Gemini call (no key was available), the default model id `gemini-3.8-flash` (taken from Google's current docs page; change `GEMINI_MODEL` if `/ai check` says the model is unknown), a real Render deploy, any live WhatsApp connection.
+* Not done: category-specific guided intake for non-property goods beyond the existing item flow; Channels remain disabled; AI does not yet read/describe photos.
