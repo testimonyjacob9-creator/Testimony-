@@ -14,8 +14,16 @@
 - Baileys provider against a fake socket: pairing, account check, reconnect/backoff, terminal states, auth dir 0700/0600, contacts events, media streaming, group listing, Status call shape
 - Backup script (consistent SQLite copy + media, credentials excluded by default)
 
+## Verified LIVE (first supervised run, owner's personal number, ACCOUNT_MODE=self, Termux, Baileys 7.0.0-rc14)
+- Pairing by phone-number code; self-chat commands recognised (/help, /status, /audience, /groups)
+- Contact sync: 8582 usable recipients, 1665 contacts WhatsApp identifies only by an anonymous ID (not targetable)
+- Group listing works (118 groups, admins-only flag shown); group posting stayed OFF, nothing sent to any group
+- Property intake from a real photo + text (PROP-001, fields parsed correctly), then a one-time Status post to ONE manually added recipient; the owner confirmed that person SAW it. The assistant reported "accepted by WhatsApp" (it can never confirm visibility itself)
+
 ## NOT verified / not built
-- ANY real WhatsApp behaviour: pairing, LID/phone handling, contact sync volume, group admin detection, Status delivery, rate limits. Status visibility can never be verified (library limit).
+- Group sending, group admin-only accuracy, Status to large audiences (mode all), rate limits, long-running stability, reconnects over days, scheduled/recurring runs live, morning briefing live, backup restore.
+- Known cosmetic issue: a one-time "now" post is reported as "Good morning! Your 9:27 AM routine has finished."
+- Status visibility can never be verified by the assistant (library limit).
 - WhatsApp Channels: deliberately disabled (docs/DESTINATIONS.md). Photos/videos to groups: not built. Leads/follow-ups (CRM), dashboard: not built.
 - Voice notes/documents: refused.
 
@@ -32,7 +40,7 @@ Add a new confirmed action by registering it in src/tasks/registry-*.js (`descri
 - Numbering: `/groups select` uses the last /groups list; remove, adverts and draft edits use /groups selected. Drafts print names so mistakes are visible.
 - "this property" means the one you touched in the last 2 hours; otherwise name it (PROP-001).
 - AM/PM or time-of-day guesses are shown in the draft as notes. Reminders are at-least-once.
-- Messages older than 10 min on arrival (offline backlog) are ignored. Baileys is pinned to 6.7.24 (legacy tag).
+- Messages older than 10 min on arrival (offline backlog) are ignored. Baileys is pinned to 7.0.0-rc14 (a release candidate). 6.7.24 connected and could send, but every incoming message failed to decrypt (Bad MAC) on the first live run, so commands were never received.
 - Marking a property sold/rented/unavailable pauses its schedules; making it available does NOT resume them.
 
 ## Next exact steps

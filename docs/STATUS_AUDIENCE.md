@@ -1,4 +1,4 @@
-# Status recipients: what Baileys 6.7.24 can and cannot do (read from the installed source)
+# Status recipients: what Baileys can and cannot do (read from the 6.7.24 source; the project now runs 7.0.0-rc14, not re-audited)
 
 ## How a Status post reaches people
 `sendMessage('status@broadcast', content, { statusJidList })`. The library encrypts the post to **exactly the JIDs you list**.

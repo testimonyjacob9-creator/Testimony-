@@ -1,4 +1,4 @@
-# Destination capability audit (Baileys 6.7.24, read from the installed library source)
+# Destination capability audit (read from the Baileys 6.7.24 source; the project now runs 7.0.0-rc14, not re-audited)
 
 Audited by inspecting `node_modules/baileys/lib`. "Supported by the library" does NOT mean verified against real
 WhatsApp: nothing here has been run live. Each destination is a separate code path with separate risks.
