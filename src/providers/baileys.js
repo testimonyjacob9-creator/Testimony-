@@ -127,6 +127,7 @@ class BaileysProvider extends WhatsAppProvider {
     const makeSocket = b.default || b.makeWASocket;
     const { state, saveCreds } = await b.useMultiFileAuthState(this.config.authDir);
     let version; try { ({ version } = await b.fetchLatestBaileysVersion()); } catch { /* use bundled default */ }
+    this.pairingRequested = false; // a new socket needs a new pairing code if still unregistered
     this._set('connecting');
     const sock = makeSocket({
       auth: state, ...(version ? { version } : {}), printQRInTerminal: false,
@@ -134,7 +135,7 @@ class BaileysProvider extends WhatsAppProvider {
       logger: this.baileysLogger(), markOnlineOnConnect: false, syncFullHistory: false,
     });
     this.sock = sock;
-    sock.ev.on('creds.update', async () => { try { await saveCreds(); this._hardenAuthDir(); } catch (e) { this.logger?.error({ err: e.message }, 'saving credentials failed'); } });
+    sock.ev.on('creds.update', () => { this._saving = (async () => { try { await saveCreds(); this._hardenAuthDir(); } catch (e) { this.logger?.error({ err: e.message }, 'saving credentials failed'); } })(); });
     sock.ev.on('connection.update', (u) => this._onConnectionUpdate(sock, state, u));
     sock.ev.on('messages.upsert', (ev) => this._onUpsert(ev));
     // Contacts are only learned from these events (no contact-list API exists in this Baileys version).
@@ -176,6 +177,7 @@ class BaileysProvider extends WhatsAppProvider {
     if (u.connection === 'close') {
       if (this.closing && this.state === 'account_mismatch') return;
       const code = u.lastDisconnect?.error?.output?.statusCode;
+      this.logger?.warn({ code, reason: u.lastDisconnect?.error?.message }, 'connection closed');
       const D = this.baileys.DisconnectReason || {};
       if (code === D.loggedOut) return this._terminal('logged_out');
       if (code === D.connectionReplaced) return this._terminal('replaced');
@@ -183,7 +185,7 @@ class BaileysProvider extends WhatsAppProvider {
       if (this.closing) return this._set('disconnected');
       this._set('reconnecting');
       const delay = code === D.restartRequired ? 0 : backoffMs(this.attempt++);
-      this.reconnectTimer = this.timers.setTimeout(() => { this.reconnectTimer = null; this._start().catch((e) => { this.logger?.error({ err: e.message }, 'reconnect failed'); this._scheduleRetry(); }); }, delay);
+      this.reconnectTimer = this.timers.setTimeout(async () => { this.reconnectTimer = null; try { await this._saving; } catch { /* logged elsewhere */ } this._start().catch((e) => { this.logger?.error({ err: e.message }, 'reconnect failed'); this._scheduleRetry(); }); }, delay);
     }
   }
   _scheduleRetry() {
