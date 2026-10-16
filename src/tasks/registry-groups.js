@@ -50,7 +50,7 @@ const groupActions = {
       const secs = Math.round(ctx.config.groupSendDelayMs / 1000);
       const lines = ['Message:', '---', text.length > 900 ? text.slice(0, 900) + ' [...]' : text, '---', `Destinations (${targets.length}):`];
       targets.forEach((t) => lines.push(`${t.num}. ${t.name}${dup.has(t.jid) ? '  (got this advert recently: will be SKIPPED)' : ''}`));
-      if (task.payload.propertyId) lines.push('Linked property: ' + (ctx.properties.getAny(task.payload.propertyId) || {}).ref + '. TEXT ONLY: photos/videos are not sent to groups yet. The property is re-checked as available before every send.');
+      if (task.payload.propertyId) lines.push('Linked property: ' + (ctx.properties.getAny(task.payload.propertyId) || {}).ref + '. Its first photo (or video, if it has no photo) is sent with this text as the caption; if it has no media, only the text is sent. The property is re-checked as available before every send.');
       lines.push(`Pace: one group every ${secs}s (about ${Math.max(1, Math.round(((targets.length - 1) * secs) / 60))} min). Each group is re-checked right before sending.`);
       lines.push('Change destinations: "only groups 2 and 4", "add group 3", "remove group 3". Numbers = /groups selected.');
       return { heading: 'Advert draft', pending: 'sent', confirm: 'start sending', lines };

@@ -220,13 +220,13 @@ test('captions use only stored fields and a custom caption overrides', async () 
   assert.match(text(await s.send('/caption PROP-001 short')), /Lovely home, call now!/);
 });
 
-test('property-linked group advert: draft refused, then text-only caption, availability re-checked, publication recorded', async () => {
+test('property-linked group advert: draft refused, then text caption (no media saved), availability re-checked, publication recorded', async () => {
   const s = await ready(); await approveAll(s, 2);
   await s.send('Three bedroom apartment for sale in Ekpoma. N25m. Call 08031234567');
   assert.match(text(await s.send('send this to my approved groups')), /still a draft/);
   await s.send('done');
   const d = text(await s.send('send PROP-001 to my approved groups'));
-  assert.match(d, /Advert draft/); assert.match(d, /Linked property: PROP-001/); assert.match(d, /TEXT ONLY/);
+  assert.match(d, /Advert draft/); assert.match(d, /Linked property: PROP-001/); assert.match(d, /if it has no media, only the text is sent/);
   await s.send('yes');
   await s.runner.tick();
   const sent = s.provider.sent.filter((m) => m.jid.endsWith('@g.us'));
@@ -256,4 +256,52 @@ test('properties persist across restart and references stay stable', async () =>
     assert.ok(b.assistant.properties.getByRef('PROP-004'));
     b.db.close();
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+async function advertWithPhoto(s) {
+  await s.send(SPEC); await s.send('', { media: photo(bytes(3000)) }); await s.send('done');
+  await s.send('send PROP-001 to my approved groups');
+  return s.send('yes');
+}
+const groupSent = (s) => s.provider.sent.filter((m) => m.jid.endsWith('@g.us'));
+
+test('group advert with a saved photo: the photo goes out with the advert text as its caption (no text-only copy)', async () => {
+  const s = await ready(); await approveAll(s, 2);
+  const draft = text(await s.send(SPEC)); assert.ok(draft);
+  await s.send('', { media: photo(bytes(3000)) }); await s.send('done');
+  assert.match(text(await s.send('send PROP-001 to my approved groups')), /first photo/);
+  await s.send('yes'); await s.runner.tick();
+  const sent = groupSent(s);
+  assert.equal(sent.length, 2);
+  for (const m of sent) { assert.ok(m.media && m.media.imagePath, 'photo sent'); assert.match(m.media.caption, /Ref: PROP-001/); assert.equal(m.text, undefined, 'no text-only duplicate'); }
+  assert.match(text(await s.send('show PROP-001')), /Posted: group x2/);
+});
+
+test('group advert: a missing photo file or a provider that cannot send photos FAILS that send instead of silently posting text', async () => {
+  const s = await ready(); await approveAll(s, 2);
+  await advertWithPhoto(s);
+  const m = s.assistant.media.forProperty(1)[0];
+  require('node:fs').unlinkSync(s.assistant.media.absolutePath(m.rel_path));
+  await s.runner.tick();
+  assert.equal(groupSent(s).length, 0, 'nothing posted');
+  assert.match(s.provider.sent[s.provider.sent.length - 1].text, /photo file is missing/i);
+
+  const t = await ready(); await approveAll(t, 2);
+  const caps = t.provider.capabilities.bind(t.provider); t.provider.capabilities = () => ({ ...caps(), sendMedia: false });
+  await advertWithPhoto(t); await t.runner.tick();
+  assert.equal(groupSent(t).length, 0);
+  assert.match(t.provider.sent[t.provider.sent.length - 1].text, /cannot send photos/i);
+});
+
+test('group advert: a caption over the WhatsApp limit sends the photo, then the full text; a failed photo sends no text', async () => {
+  const s = await ready();
+  const file = require('node:path').join(require('node:os').tmpdir(), `cap-${Date.now()}.jpg`); require('node:fs').writeFileSync(file, bytes(3000));
+  const media = { kind: 'image', path: file }; const msg = 'Long advert text. '.repeat(70);
+  const res = await s.runner._deliver('101@g.us', { message: msg }, media);
+  assert.equal(res.ok, true);
+  const sent = groupSent(s);
+  assert.equal(sent.length, 2); assert.ok(sent[0].media && !sent[0].media.caption); assert.equal(sent[1].text, msg);
+  s.provider.failNext = 'simulated photo failure';
+  const bad = await s.runner._deliver('102@g.us', { message: msg }, media);
+  assert.equal(bad.ok, false); assert.equal(groupSent(s).length, 2, 'no text after a failed photo');
 });

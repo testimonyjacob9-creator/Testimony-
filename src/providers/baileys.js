@@ -93,7 +93,7 @@ class BaileysProvider extends WhatsAppProvider {
   onContacts(h) { this._contactsHandler = h; }
   connectionState() { return this.state; }
   capabilities() {
-    return { sendText: true, sendMedia: false, sendDocument: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
+    return { sendText: true, sendMedia: true, sendDocument: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
   }
   _set(s) { if (this.state !== s) { this.state = s; try { this._stateHandler(s); } catch (e) { this.logger?.error({ err: e.message }, 'state handler failed'); } } }
 
@@ -222,7 +222,15 @@ class BaileysProvider extends WhatsAppProvider {
       return { ok: true, id: res?.key?.id, verified: true };
     } catch (e) { return { ok: false, verified: false, error: e.message }; }
   }
-  async sendMedia() { return { ok: false, verified: false, error: 'media sending is not implemented yet (Phase 3/4)' }; }
+  /** Send a saved photo or video (read from a local file path) with an optional caption. Used for owner-confirmed group adverts. */
+  async sendMedia(jid, { imagePath, videoPath, caption } = {}) {
+    if (this.state !== 'connected' || !this.sock) return { ok: false, verified: false, error: 'not connected' };
+    const content = imagePath ? { image: { url: imagePath } } : videoPath ? { video: { url: videoPath } } : null;
+    if (!content) return { ok: false, verified: false, error: 'no media file given' };
+    if (caption) content.caption = caption;
+    try { const res = await this.sock.sendMessage(jid, content); return { ok: true, id: res && res.key && res.key.id, verified: false }; }
+    catch (e) { return { ok: false, verified: false, error: e.message }; }
+  }
   /** Send a local file as a document (used only for the owner's own /backup). */
   async sendDocument(jid, { path: filePath, fileName, mimetype, caption } = {}) {
     if (this.state !== 'connected' || !this.sock) return { ok: false, verified: false, error: 'not connected' };

@@ -158,8 +158,8 @@ test('sendText: refuses when disconnected, builds JID, reports failures honestly
 test('capabilities are honest: Status is supported but never verifiable; media sending is still unsupported', async () => {
   const { p } = await open('self');
   const c = p.capabilities();
-  assert.equal(c.publishStatus, true); assert.equal(c.statusVerification, false); assert.equal(c.sendMedia, false);
-  assert.equal((await p.sendMedia('x', {})).ok, false);
+  assert.equal(c.publishStatus, true); assert.equal(c.statusVerification, false); assert.equal(c.sendMedia, true);
+  assert.equal((await p.sendMedia('x', {})).ok, false); // not connected / no file: honest failure
   assert.deepEqual(await p.publishStatus({ text: 'hi', recipients: [] }), { ok: false, verified: false, error: 'no recipients' });
   assert.deepEqual(await p.publishStatus({ recipients: ['1@s.whatsapp.net'] }), { ok: false, verified: false, error: 'nothing to post' });
 });

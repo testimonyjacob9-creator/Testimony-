@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
+const fs = require('node:fs');
 const { getPause } = require('../tasks/pause');
 const { audit } = require('../storage/db');
 
@@ -86,6 +87,28 @@ class CampaignRunner {
     } finally { this.busy = false; }
   }
 
+  /** The listing's cover media for a property-linked advert: first photo, else first video. null = text-only advert. */
+  _media(c) {
+    if (!c.property_id) return null;
+    const rows = this.ctx.media.forProperty(c.property_id);
+    const m = rows.find((r) => r.kind === 'image') || rows.find((r) => r.kind === 'video');
+    return m ? { kind: m.kind, path: this.ctx.media.absolutePath(m.rel_path) } : null;
+  }
+
+  /** One group send. With media there is NEVER a silent downgrade to text: a problem is reported as a failure for that group. */
+  async _deliver(jid, c, media) {
+    const { ctx } = this;
+    if (!media) return ctx.provider.sendText(jid, c.message);
+    if (!fs.existsSync(media.path)) return { ok: false, error: 'the listing photo file is missing, so nothing was sent' };
+    if (!ctx.provider.capabilities().sendMedia) return { ok: false, error: 'this WhatsApp connection cannot send photos, so nothing was sent' };
+    const key = media.kind === 'image' ? 'imagePath' : 'videoPath';
+    if (String(c.message).length <= 1000) return ctx.provider.sendMedia(jid, { [key]: media.path, caption: c.message }); // WhatsApp caption limit is about 1024
+    const first = await ctx.provider.sendMedia(jid, { [key]: media.path });
+    if (!first.ok) return first;
+    const second = await ctx.provider.sendText(jid, c.message);
+    return second.ok ? second : { ok: false, error: `the photo was sent but the text failed (${second.error || 'send failed'})` };
+  }
+
   async _run(c) {
     const { ctx } = this;
     if (!ctx.groups.postingEnabled()) {
@@ -97,6 +120,7 @@ class CampaignRunner {
     if (!live.ok) return false; // cannot verify destinations: leave pending, try again next tick
     const liveMap = new Map(live.groups.map((g) => [g.id, g]));
     let sentOne = false;
+    const media = this._media(c);
     for (const row of ctx.campaigns.pendingSends(c.id)) {
       if (ctx.campaigns.get(c.id).status !== 'sending') break; // cancelled meanwhile
       if (getPause(ctx.db, ctx.clock()).paused) return false;
@@ -110,7 +134,7 @@ class CampaignRunner {
       if (ctx.campaigns.recentlySent(c.message, [row.group_jid], ctx.config.groupDedupeMs, c.id).has(row.group_jid)) { settle('skipped', 'this advert was already sent to this group recently'); continue; }
       if (sentOne) await this.sleep(ctx.config.groupSendDelayMs); // pacing between real sends
       let res;
-      try { res = await ctx.provider.sendText(row.group_jid, c.message); } catch (e) { res = { ok: false, error: e.message }; }
+      try { res = await this._deliver(row.group_jid, c, media); } catch (e) { res = { ok: false, error: e.message }; }
       if (res.ok) { settle('sent', 'accepted by WhatsApp (delivery not confirmed)', res.id || null); sentOne = true; if (c.property_id) ctx.properties.addPublication(c.property_id, 'group', 'accepted', row.group_name); audit(ctx.db, 'campaign', 'group.send', 'ok', `C-${c.id}`); }
       else { settle('failed', String(res.error || 'send failed').slice(0, 200)); sentOne = true; audit(ctx.db, 'campaign', 'group.send', 'failed', `C-${c.id}`); }
     }
