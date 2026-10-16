@@ -8,10 +8,11 @@ const { openDatabase } = require('../src/storage/db');
 const { acquireLease, renewLease, releaseLease, tryAcquire } = require('../src/storage/lease');
 
 const root = path.join(__dirname, '..');
-const yaml = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
+const yaml = fs.readFileSync(path.join(root, 'render.paid.yaml'), 'utf8');
+const freeYaml = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
 const pkg = require('../package.json');
 
-test('render.yaml: persistent disk, DATA_DIR on the disk, one instance, no secrets, real WhatsApp provider (not mock) in self mode', () => {
+test('render.paid.yaml: persistent disk, DATA_DIR on the disk, one instance, no secrets, real WhatsApp provider (not mock) in self mode', () => {
   const mount = yaml.match(/mountPath:\s*(\S+)/)[1];
   assert.equal(mount, '/var/data');
   assert.match(yaml, new RegExp(`key: DATA_DIR[^\\n]*\\n\\s+value: ${mount}`));
@@ -28,10 +29,19 @@ test('render.yaml: persistent disk, DATA_DIR on the disk, one instance, no secre
   const have = node.split('.').map(Number);
   assert.ok(have[0] > min[0] || (have[0] === min[0] && have[1] >= min[1]), 'NODE_VERSION satisfies engines');
 });
+test('render.yaml (free web service): web port health check, no disk, temporary storage acknowledged, real provider, no secrets', () => {
+  assert.match(freeYaml, /type: web\b/); assert.match(freeYaml, /plan: free\b/); assert.match(freeYaml, /healthCheckPath: \/health/);
+  assert.match(freeYaml, /numInstances:\s*1\b/); assert.doesNotMatch(freeYaml, /^\s*disk:/m);
+  assert.match(freeYaml, /key: EPHEMERAL_OK[^\n]*\n\s+value: "true"/);
+  assert.match(freeYaml, /key: WHATSAPP_PROVIDER\s+value: baileys/); assert.doesNotMatch(freeYaml, /value: mock/);
+  for (const k of ['GEMINI_API_KEY', 'OWNER_PHONE']) assert.match(freeYaml, new RegExp(`key: ${k}[^\\n]*\\n\\s+sync: false`));
+  assert.doesNotMatch(freeYaml, /AIza[0-9A-Za-z_-]{10,}/);
+});
 test('render env: DATA_DIR drives SQLite, WhatsApp session and media consistently', () => {
   const c = loadConfig({ OWNER_PHONE: '+2347065702702', DATA_DIR: '/var/data', GEMINI_API_KEY: 'k' });
   assert.equal(c.dbPath, '/var/data/assistant.sqlite'); assert.equal(c.authDir, '/var/data/auth_state'); assert.equal(c.mediaDir, '/var/data/media');
-  assert.equal(c.ownerPhone, '2347065702702'); assert.equal(c.provider, 'mock'); // code default; render.yaml sets baileys assert.equal(c.timezone, 'Africa/Lagos');
+  assert.equal(c.ownerPhone, '2347065702702'); assert.equal(c.provider, 'mock'); // code default; the blueprints set baileys
+  assert.equal(c.timezone, 'Africa/Lagos');
   assert.equal(c.ai.enabled, true);
 });
 test('secrets are not committed: .env ignored, example has an empty key, no key-like strings in tracked sources', () => {

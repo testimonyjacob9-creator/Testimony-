@@ -1,6 +1,7 @@
 'use strict';
 require('dotenv').config();
 const fs = require('node:fs');
+const { createHealthServer } = require('./http/health');
 const { loadConfig } = require('./config');
 const { createLogger } = require('./logger');
 const { openDatabase, audit } = require('./storage/db');
@@ -34,7 +35,7 @@ function silenceSignalNoise() {
  * the database, WhatsApp session and media would silently vanish on the next deploy. Returns a warning string or null.
  */
 function persistenceWarning(config, fsApi = fs) {
-  if (!config.onRender) return null;
+  if (!config.onRender || config.ephemeralOk) return null; // EPHEMERAL_OK=true: free hosting, acknowledged (reported at startup and in /status)
   try {
     const here = fsApi.statSync(config.dataDir).dev;
     const root = fsApi.statSync('/').dev;
@@ -49,6 +50,14 @@ async function main() {
   try { config = loadConfig(); } catch (e) { console.error(e.message); process.exit(1); }
   const logger = createLogger(config.logLevel);
   fs.mkdirSync(config.mediaDir, { recursive: true, mode: 0o700 });
+  // Bind the web port FIRST so a host health check passes while the database and WhatsApp are still starting.
+  let health = null;
+  if (config.port) {
+    health = createHealthServer({ port: config.port });
+    try { logger.info({ port: await health.start() }, 'health endpoint listening on 0.0.0.0 (GET /health)'); }
+    catch (e) { logger.error({ err: e.message }, 'could not start the health endpoint'); process.exit(1); }
+  }
+  if (config.ephemeralOk) logger.warn('EPHEMERAL_OK=true: storage is TEMPORARY. The database and WhatsApp login are lost on every restart; use /backup and expect to re-pair after restarts (docs/RENDER.md).');
   const diskWarning = persistenceWarning(config);
   if (diskWarning) logger.error(diskWarning);
   if (config.onRender && config.provider === 'mock') logger.warn('WHATSAPP_PROVIDER=mock on Render: nothing is sent or received. Set WHATSAPP_PROVIDER=baileys to run the real bot (docs/RENDER.md).');
@@ -86,7 +95,7 @@ async function main() {
     if (stopping) return; stopping = true;
     logger.info({ sig }, 'shutting down');
     clearInterval(lease); clearInterval(noiseTimer);
-    try { scheduler.stop(); campaigns.stop(); schedRunner.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); if (!leaseLost) releaseLease(db, instanceId); db.close(); } finally { process.exit(0); }
+    try { if (health) await health.stop(); scheduler.stop(); campaigns.stop(); schedRunner.stop(); await provider.disconnect(); audit(db, 'system', 'shutdown', 'ok'); if (!leaseLost) releaseLease(db, instanceId); db.close(); } finally { process.exit(0); }
   };
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

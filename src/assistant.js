@@ -32,6 +32,7 @@ const HELP = `${PREFIX} *Commands*
 /contact <number> - save your contact number for new items
 /properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
 /advert <text> - draft an advert for your approved groups (needs your yes)
+/backup - send me a copy of your data (send it back with /restore to restore)
 /briefing - business update | /ai - AI helper status (/ai check tests it)
 
 *You can also just type*, e.g.
@@ -213,6 +214,7 @@ class Assistant {
     switch (name) {
       case 'help': case 'start': return HELP;
       case 'status': return this.status(now);
+      case 'backup': return this.backupCommand();
       case 'tasks': return this.tasks({}, now);
       case 'cancel': return this.cancel({ id: (args.match(/(\d+)/) || [])[1] ? Number(args.match(/(\d+)/)[1]) : null, all: /^all\b/i.test(args) }, this.store.activeProposal(), now);
       case 'pause': return this.pause(require('./nlp/intent').parsePauseUntil(args, now, this.config.timezone), now);
@@ -362,6 +364,7 @@ Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.app
 Properties: ${this.properties.list({}).length} saved
 Schedules: ${this.schedules.list(['active']).length} active, ${this.schedules.list(['paused']).length} paused
 AI helper: ${this.ai && this.ai.enabled ? 'configured (/ai check to test)' : 'OFF'}
+Storage: ${this.config.ephemeralOk ? 'TEMPORARY: data and WhatsApp login are lost when the host restarts (use /backup regularly)' : 'persistent'}
 Not built yet: leads and follow-ups`;
   }
 }
@@ -370,6 +373,7 @@ const aiMixin = { ...require('./ai/commands') }; delete aiMixin.adViolation;
 Object.assign(Assistant.prototype, aiMixin);
 Object.assign(Assistant.prototype, require('./groups/commands'));
 Object.assign(Assistant.prototype, require('./status/commands'));
+Object.assign(Assistant.prototype, require('./backup/commands'));
 Object.assign(Assistant.prototype, require('./schedule/commands'));
 const propertyMixin = { ...require('./properties/commands') }; delete propertyMixin.parseFilters;
 Object.assign(Assistant.prototype, propertyMixin);

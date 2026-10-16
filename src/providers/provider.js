@@ -13,6 +13,8 @@ class WhatsAppProvider {
   /** @param {(state:string)=>void} handler */ onConnectionChange(handler) { throw new Error('not implemented'); }
   async sendText(jid, text) { throw new Error('not implemented'); }
   async sendMedia(jid, media) { throw new Error('not implemented'); }
+  /** Send a local file as a WhatsApp document. @returns {Promise<{ok:boolean,id?:string,verified:boolean,error?:string}>} */
+  async sendDocument(jid, doc) { return { ok: false, verified: false, error: 'not supported' }; }
   /**
    * @param {{text?:string, imagePath?:string, videoPath?:string, caption?:string, recipients:string[]}} content
    * @returns {Promise<{ok:boolean,id?:string,verified:false,error?:string}>} verified is ALWAYS false for Status.

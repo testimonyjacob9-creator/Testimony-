@@ -48,6 +48,12 @@ class MockProvider extends WhatsAppProvider {
     this.sent.push({ id, jid, media });
     return { ok: true, id, verified: true };
   }
+  async sendDocument(jid, doc) {
+    const bad = this._guard(); if (bad) return bad;
+    const id = `mock-${this.sent.length + 1}`;
+    this.sent.push({ id, jid, document: { fileName: doc.fileName, mimetype: doc.mimetype, caption: doc.caption, content: require('node:fs').readFileSync(doc.path) } });
+    return { ok: true, id, verified: true };
+  }
   async publishStatus(content) {
     const bad = this._guard(); if (bad) return bad;
     if (!content || !Array.isArray(content.recipients) || !content.recipients.length) return { ok: false, verified: false, error: 'no recipients' };
@@ -62,7 +68,7 @@ class MockProvider extends WhatsAppProvider {
     return { ok: true, groups: this.groups.map((g) => ({ size: null, canSend: true, isMember: true, ...g })) };
   }
   capabilities() {
-    return { sendText: true, sendMedia: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
+    return { sendText: true, sendMedia: true, sendDocument: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
   }
   /** Test helper: simulate an incoming message. */
   async simulateInbound(msg) {

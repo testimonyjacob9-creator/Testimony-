@@ -1,31 +1,30 @@
-# Render Blueprint for OLIVES: one always-on background worker + one persistent disk.
-# A worker needs no HTTP port or health check: it holds the WhatsApp connection and runs the schedulers.
-# Persistent disks need a PAID instance type; on a free instance the database and WhatsApp login vanish on every deploy.
+# Render Blueprint for OLIVES: FREE Web Service (default). Costs nothing, but storage is TEMPORARY.
+# On a free instance the filesystem is erased whenever the service restarts, redeploys or spins down. That means:
+#   * the SQLite database (listings, schedules, memory) AND the WhatsApp login are LOST on every restart;
+#   * you must re-pair WhatsApp after a restart; use /backup to keep a copy of your data and /restore to bring it back.
+# An uptime monitor (docs/RENDER.md) stops the 15-minute idle spin-down but cannot prevent other restarts.
+# For data that survives restarts use render.paid.yaml (paid worker + disk).
 # Secrets are NOT in this file: Render asks for each `sync: false` value in the dashboard.
-# Everything else (timezone Africa/Lagos, Gemini model, AI limits, log level, media/auth/database paths) has a safe default in code.
 services:
-  - type: worker
+  - type: web
     name: olives-assistant
     runtime: node
-    plan: starter          # smallest paid type; disks are not available on free instances
-    numInstances: 1        # MUST stay 1: one WhatsApp session + one SQLite file + one scheduler
+    plan: free
+    numInstances: 1          # never run two: one WhatsApp session, one SQLite file, one scheduler
     buildCommand: npm ci --omit=dev
     startCommand: npm start
-    disk:
-      name: olives-data
-      mountPath: /var/data   # SQLite, auth_state/ (WhatsApp login) and media/ all live here
-      sizeGB: 1
+    healthCheckPath: /health # Render injects PORT; the app binds 0.0.0.0:$PORT
     envVars:
       - key: NODE_VERSION
         value: 22.13.0
-      - key: DATA_DIR            # must equal disk.mountPath
-        value: /var/data
-      - key: OWNER_PHONE         # you enter it: 2347065702702 (digits only)
+      - key: DATA_DIR            # temporary on purpose: nothing on a free instance persists
+        value: /tmp/olives-data
+      - key: EPHEMERAL_OK        # acknowledges the temporary storage above (changes only how it is reported)
+        value: "true"
+      - key: OWNER_PHONE         # you enter it: digits only, e.g. 2347065702702
         sync: false
       - key: GEMINI_API_KEY      # you enter it in the dashboard only; never commit it
         sync: false
-      # Fixed settings (not secrets): the real WhatsApp connection, running on the owner's own number.
-      # Nothing connects until YOU type the pairing code into your phone (docs/RENDER.md, section "First-time pairing").
       - key: WHATSAPP_PROVIDER
         value: baileys
       - key: ACCOUNT_MODE

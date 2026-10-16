@@ -10,6 +10,12 @@ function validTimezone(tz) {
   try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true; } catch { return false; }
 }
 
+function parsePort(v) {
+  if (v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : false; // false = invalid, reported with the other config errors
+}
+
 function loadConfig(env = process.env) {
   const errors = [];
   const ownerPhone = normalizePhone(env.OWNER_PHONE);
@@ -69,6 +75,8 @@ function loadConfig(env = process.env) {
   const aiDailyLimit = Number(env.AI_DAILY_REQUEST_LIMIT ?? 300);
   if (!Number.isInteger(aiDailyLimit) || aiDailyLimit < 1 || aiDailyLimit > 100000) errors.push('AI_DAILY_REQUEST_LIMIT must be an integer 1-100000');
 
+  if (parsePort(env.PORT) === false) errors.push('PORT must be a whole number between 1 and 65535');
+
   if (errors.length) {
     const err = new Error('Invalid configuration:\n - ' + errors.join('\n - '));
     err.code = 'CONFIG_INVALID';
@@ -86,6 +94,10 @@ function loadConfig(env = process.env) {
     groupSendDelayMs: Math.floor(delaySec * 1000), maxGroupsPerCampaign: maxGroups, groupDedupeMs: Math.floor(dedupeHours * 3600 * 1000),
     logLevel: env.LOG_LEVEL || 'info',
     dataDir, onRender,
+    // Render Web Services inject PORT; the health listener starts only when it is set (a paid worker has no port).
+    port: parsePort(env.PORT) || null,
+    // EPHEMERAL_OK=true acknowledges that DATA_DIR is NOT persistent (free hosting). It only changes how loudly this is reported.
+    ephemeralOk: String(env.EPHEMERAL_OK || '').toLowerCase() === 'true',
     authDir: path.join(dataDir, 'auth_state'),
     dbPath: path.join(dataDir, 'assistant.sqlite'),
     mediaDir: path.join(dataDir, 'media'),

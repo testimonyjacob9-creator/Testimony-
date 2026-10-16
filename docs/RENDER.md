@@ -1,59 +1,56 @@
 # Deploying OLIVES on Render
 
-Render is the production host. Termux is for local testing only. SQLite is the only database.
+Two blueprints are in the repo. SQLite is the only database; there is no Firebase or any other service.
 
-## What you need
-| Item | Notes |
-|---|---|
-| Render account, this repo connected | New > Blueprint, pick this repo; Render reads `render.yaml` |
-| A **paid** instance type | Persistent disks are not available on free instances. `render.yaml` uses `starter` (about US$7/month) plus a 1 GB disk (about US$0.25/month); check Render's pricing page. Nothing is bought by this repo: you confirm it in Render. |
-| `GEMINI_API_KEY` | From Google AI Studio |
-| `OWNER_PHONE` | `2347065702702` (digits only) |
-
-## Environment variables: the exact list
-Render asks for two values when you create the Blueprint. Enter them in the dashboard only.
-
-| Variable | You enter | Why |
+| | `render.yaml` (default) | `render.paid.yaml` |
 |---|---|---|
-| `OWNER_PHONE` | `2347065702702` | Identifies the only person OLIVES obeys. Cannot be defaulted. |
-| `GEMINI_API_KEY` | your key | Secret. Without it OLIVES still starts; AI is reported as unavailable. |
+| Cost | Free | Paid worker plus a disk (check Render's pricing page) |
+| Service type | Web Service (free) | Background worker |
+| Data survives restarts | **No** | Yes (disk at `/var/data`) |
+| WhatsApp login survives restarts | **No** | Yes |
 
-`render.yaml` already fixes these (you do not type them): `DATA_DIR=/var/data`, `NODE_VERSION=22.13.0`, `WHATSAPP_PROVIDER=baileys`, `ACCOUNT_MODE=self`.
-Defaults in code (set a variable only to override): `TIMEZONE=Africa/Lagos`, `AI_ENABLED=true`, `AI_PROVIDER=gemini`, `GEMINI_MODEL=gemini-3.8-flash`, `AI_DAILY_REQUEST_LIMIT=300`, `AI_TIMEOUT_MS=20000`, `LOG_LEVEL=info`.
+**Read this before using the free option.** A free Render instance has a temporary filesystem, erased whenever the service restarts, redeploys or spins down, and Render can restart it at any time. So on the free option:
+* the database (listings, schedules, drafts, chat memory) is **lost on every restart**;
+* the WhatsApp login is **lost on every restart**, so you must **re-pair** each time;
+* an uptime monitor stops the 15-minute idle spin-down only. It cannot stop deploys, platform restarts or crashes, and it does not make anything persistent.
 
-`ACCOUNT_MODE=self` means OLIVES is a linked device on **your own** WhatsApp number (you message yourself; Status posts appear on your Status). Risk: if WhatsApp judges the automation abusive it can restrict that number. The alternative is a dedicated second number (`ACCOUNT_MODE=separate` plus `BOT_PHONE`); see ACCOUNT_SETUP.md.
+What reduces the damage: `/backup` sends you a copy of your data in WhatsApp, and sending that file back with the caption `/restore` brings it back (after you confirm). Backups do not contain photos/videos or the WhatsApp login. Make a backup before every deploy and regularly otherwise: Olives cannot do it automatically, because a message to you is an automatic action and the host can restart at any moment.
 
-## Service type and disk
-* One **background worker**. It needs no HTTP port and no health check: it holds the WhatsApp connection and runs the schedulers. Render restarts it if it exits.
-* One **persistent disk** named `olives-data`, mounted at `/var/data`, 1 GB. `DATA_DIR=/var/data` puts everything that must survive on it:
-  * `/var/data/assistant.sqlite` (database, schedules, drafts, conversation memory)
-  * `/var/data/auth_state/` (the WhatsApp login)
-  * `/var/data/media/` (listing photos and videos)
-* If the disk is missing, the app logs an error at startup ("DATA_DIR ... is on the ephemeral filesystem") because the data would be lost on the next deploy.
-* **Exactly one instance** (`numInstances: 1`). Two instances would fight over one WhatsApp session and one database. The app enforces it too: it takes a renewable lease in SQLite, and a second process waits up to 60 s (a redeploy overlap) then exits. A crashed process's lease expires after 45 s. Services with a disk are stopped before the replacement starts, so a deploy has a short offline gap.
-* Build `npm ci --omit=dev`, start `npm start`. On `SIGTERM` it stops schedulers, disconnects WhatsApp, writes an audit row, releases the lease and closes SQLite.
+## Free setup (exact steps)
+1. Render dashboard > **New > Blueprint**, pick this repo. It reads `render.yaml`. Confirm the instance type shows **Free**.
+2. Enter the two values it asks for: `OWNER_PHONE` (digits only, e.g. `2347065702702`) and `GEMINI_API_KEY`.
+3. Deploy. The app opens its web port first, so Render's health check (`/health`) passes while WhatsApp is still starting.
+4. Pair WhatsApp (next section). 
+5. Set up the uptime monitor (below).
+
+Environment variable names: you enter `OWNER_PHONE` and `GEMINI_API_KEY`. The blueprint sets `NODE_VERSION`, `DATA_DIR=/tmp/olives-data` (temporary on purpose), `EPHEMERAL_OK=true` (acknowledges the temporary storage; it only changes how it is reported), `WHATSAPP_PROVIDER=baileys`, `ACCOUNT_MODE=self`. Render supplies `PORT`. Everything else has a safe default (timezone `Africa/Lagos`, model `gemini-3.8-flash`, daily AI cap 300).
+
+`ACCOUNT_MODE=self` means OLIVES runs as a linked device on your own number. Repeated re-pairing (which the free option forces) is the kind of activity WhatsApp may treat as unusual; I cannot verify how it reacts.
+
+## Health endpoint and uptime monitoring
+* `GET` or `HEAD` `/health` returns `200` with the fixed body `{"status":"ok"}`. It shows nothing else: no phone number, no WhatsApp or database state, no configuration. Everything else on the port returns 404.
+* A 200 means the process is running. It does **not** mean WhatsApp is connected: send `/status` in WhatsApp for that.
+* **UptimeRobot (free):** create an account > **Add New Monitor** > Monitor Type **HTTP(s)** > URL `https://<your-service-name>.onrender.com/health` (your exact address is at the top of the service page in Render; the default name from the blueprint is `olives-assistant`) > interval **5 minutes** (the shortest the free plan offers, as far as I know; check their current terms) > Create.
+* Render's free instance hours (750/month) are shared by all your free web services. One service awake 24/7 uses about 744, so a second always-on free service will run you out.
 
 ## First-time pairing (you do this yourself)
-Deploying does not log in to WhatsApp. The login happens only when **you** type a code on your phone.
-1. Deploy. Open the service's **Logs** in Render.
-2. Wait for a block like: `WhatsApp pairing code: ABCD-1234`. The code is printed to the console only (never to log files, never sent to WhatsApp). Anyone who can read your Render logs can see it, so keep the dashboard private.
-3. On the phone whose number is `2347065702702`: WhatsApp > Settings > **Linked devices** > Link a device > **Link with phone number instead** > enter the code. It expires quickly; if it does, the app reconnects and prints a fresh one (one request per connection attempt, never repeated while an attempt is in progress).
-4. The app checks the linked account equals `OWNER_PHONE`. If not, it disconnects (`account_mismatch`) and does not reconnect.
-5. You receive "Assistant online" in your own chat. Send `/status`, then `/ai check`.
-6. Do the supervised checks in docs/GO_LIVE.md before posting anything to other people. Group posting is OFF until you run `/groups enable`.
+Deploying does not log in to WhatsApp. It requests a pairing code, and nothing links until **you** type it on your phone. Requesting the code may make WhatsApp show a link prompt on that phone; ignore it until you are ready.
+1. Open the service's **Logs** in Render.
+2. Wait for `WhatsApp pairing code: ABCD-1234` (console only; anyone who can read your Render logs can see it).
+3. On the phone for `OWNER_PHONE`: WhatsApp > Settings > **Linked devices** > Link a device > **Link with phone number instead** > enter the code. If it expires, the app reconnects and prints a fresh one (one request per connection attempt).
+4. The app checks the linked account equals `OWNER_PHONE`; if not it disconnects and does not retry.
+5. You get "Assistant online". Send `/status` (shows `Storage: TEMPORARY` on the free option), then `/ai check`.
 
-The login is stored on the disk, so restarts and deploys do not ask for a new code.
+**After every restart on the free option** the login is gone: repeat the steps above, then send your last backup file with the caption `/restore` and answer **yes**. Restoring leaves automation **paused** so old schedules cannot post anything by surprise: check `/schedule` and then send `/resume`. Re-send any photos you need.
 
-## If WhatsApp logs the session out
-Logout, replaced and bad-session states are terminal: the app logs the state and does **not** loop or delete anything. To re-pair: unlink the old session on your phone (Linked devices), open a Render **Shell** for the service, run `rm -rf /var/data/auth_state`, then restart the service and repeat "First-time pairing". Only do this when the logs say the session ended.
+## Reconnecting
+Brief drops reconnect automatically with a growing delay (up to one minute between tries, never a tight loop). A logged-out, replaced or invalid session is final: the app logs it, stops retrying and deletes nothing. Unlink the device in WhatsApp, restart the service in Render, and pair again.
 
-## Gemini: checking it really works
-"Configured" is not "working". Send `/ai check` in WhatsApp (a real request to Google) or run `npm run ai:check` in a Render shell. A missing or invalid key, a retired model, quota limits and timeouts each give a plain message, and every basic command keeps working. `/ai` alone only shows configuration and usage. Gemini API use can be billed by Google: set a spend limit in your Google project and keep `AI_DAILY_REQUEST_LIMIT` low.
+## Gemini
+"Configured" is not "working". Send `/ai check` in WhatsApp for a real test request (Render's free tier has no shell, so `npm run ai:check` is for your own computer). Without a key Olives still runs and says AI is off. Gemini API usage can be billed by Google: set a spend limit in your Google project.
 
-## Backups and recovery
-* **Backup:** in a Render shell, `npm run backup` writes a consistent copy of the database and media under `DATA_DIR/backups`. Also enable Render **disk snapshots** in the dashboard. Download a copy before risky changes.
-* **Never** delete `assistant.sqlite`. Migrations run automatically at startup, only add or rebuild tables inside a transaction, and keep existing rows.
-* **Restore:** stop the service (suspend it in Render), copy the backup's `assistant.sqlite` over `/var/data/assistant.sqlite` and delete any `assistant.sqlite-wal` / `-shm` beside it, then resume. If the disk itself is lost, restore from a Render snapshot or your downloaded backup. The WhatsApp login (`auth_state/`) is separate: if it is gone, re-pair as above.
+## Paid persistent option
+Choose `render.paid.yaml` when creating the Blueprint. It runs a background worker with a 1 GB disk at `/var/data` holding `assistant.sqlite`, `auth_state/` (the WhatsApp login) and `media/`, so restarts keep everything. Keep exactly one instance. Back up with `npm run backup` in a Render shell (it writes under `/var/data/backups`) and enable Render disk snapshots. Never delete `assistant.sqlite`; migrations keep existing rows.
 
 ## What has and has not been verified
-Automated tests use mocks. They have not proven a live Gemini request, a real WhatsApp pairing, or a Render deployment; those are yours to confirm using the steps above.
+Automated tests use mocks. They have not proven a live Gemini request, a real WhatsApp pairing or document transfer, or a Render deployment.

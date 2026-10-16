@@ -121,6 +121,7 @@ module.exports = {
   async _handleMedia(msg) {
     const media = msg.media;
     const reply = (t) => this._send(msg.chat, `${this.prefix} ${t}`);
+    if (media.type === 'document' && /^\/restore\b/i.test((msg.text || '').trim())) return this.backupRestoreUpload(msg, reply);
     if (!['image', 'video'].includes(media.type)) { await reply(`I can only store photos and videos for listings (not ${media.type}s yet). Nothing was saved.`); return { handled: true }; }
     const v = this.media.validate(media.mime, media.size);
     if (!v.ok) { await reply(`I did not save that file: ${v.error}.`); return { handled: true }; }

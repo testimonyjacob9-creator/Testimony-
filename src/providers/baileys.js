@@ -46,7 +46,7 @@ function describeMedia(message, type, openMedia) {
   const size = Number(node.fileLength && node.fileLength.toString ? node.fileLength.toString() : node.fileLength);
   return {
     type, mime: node.mimetype, size: Number.isFinite(size) && size > 0 ? size : undefined, fileName: node.fileName, seconds: node.seconds,
-    open: openMedia && (type === 'image' || type === 'video') ? () => openMedia(node, type) : undefined,
+    open: openMedia && (type === 'image' || type === 'video' || type === 'document') ? () => openMedia(node, type) : undefined,
   };
 }
 
@@ -93,7 +93,7 @@ class BaileysProvider extends WhatsAppProvider {
   onContacts(h) { this._contactsHandler = h; }
   connectionState() { return this.state; }
   capabilities() {
-    return { sendText: true, sendMedia: false, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
+    return { sendText: true, sendMedia: false, sendDocument: true, publishStatus: true, statusVerification: false, groups: true, receiveMedia: true };
   }
   _set(s) { if (this.state !== s) { this.state = s; try { this._stateHandler(s); } catch (e) { this.logger?.error({ err: e.message }, 'state handler failed'); } } }
 
@@ -223,6 +223,14 @@ class BaileysProvider extends WhatsAppProvider {
     } catch (e) { return { ok: false, verified: false, error: e.message }; }
   }
   async sendMedia() { return { ok: false, verified: false, error: 'media sending is not implemented yet (Phase 3/4)' }; }
+  /** Send a local file as a document (used only for the owner's own /backup). */
+  async sendDocument(jid, { path: filePath, fileName, mimetype, caption } = {}) {
+    if (this.state !== 'connected' || !this.sock) return { ok: false, verified: false, error: 'not connected' };
+    try {
+      const res = await this.sock.sendMessage(jid, { document: { url: filePath }, mimetype: mimetype || 'application/octet-stream', fileName: fileName || 'file', ...(caption ? { caption } : {}) });
+      return { ok: true, id: res && res.key && res.key.id, verified: false };
+    } catch (e) { return { ok: false, verified: false, error: e.message }; }
+  }
   /**
    * Post to WhatsApp Status. `recipients` (phone JIDs) is MANDATORY: the library encrypts the post to exactly that list.
    * Media is read from a local file path. Returns verified:false always: there is no way to read a Status back.
