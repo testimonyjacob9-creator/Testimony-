@@ -19,9 +19,11 @@ const num = (w) => (/^\d+$/.test(w) ? parseInt(w, 10) : NUM_WORDS[String(w).toLo
 const MULT = { k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, b: 1e9, bn: 1e9, billion: 1e9 };
 
 /** "25 million", "N25m", "₦25,000,000", "30m" -> integer naira, or null. */
+const PRICE_WORD = /\b(?:price|priced(?:\s+at)?|costs?|going\s+for|selling\s+(?:at|for)|asking)\b\D{0,12}?(\d[\d,]*(?:\.\d+)?)\s*(billion|bn|b|million|mil|m|thousand|k)?(?![a-z])/i;
 function parsePrice(text, { loose = false } = {}) {
   const t = String(text || '').replace(PHONE_G, ' ');
   let m = t.match(/(?:₦|\bNGN\s?|\bN(?=\s?\d)|#(?=\d))\s?(\d[\d,]*(?:\.\d+)?)\s*(billion|bn|b|million|mil|m|thousand|k)?(?![a-z])/i);
+  if (!m) m = t.match(PRICE_WORD); // "promo price 70k each": a price word right before the number is enough
   if (!m && loose) m = t.match(/(\d[\d,]*(?:\.\d+)?)\s*(billion|bn|b|million|mil|m|thousand|k)?(?![a-z])/i);
   if (!m) m = t.match(/(\d[\d,]*(?:\.\d+)?)\s*(billion|million|thousand)\b/i);
   if (!m) return null;

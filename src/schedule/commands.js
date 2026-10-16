@@ -24,7 +24,7 @@ module.exports = {
     if (DEAD.includes(p.status)) return `${p.ref} is ${p.status}, so I will not schedule posts for it. Nothing was prepared.`;
     let groupJids = null;
     if (it.destination === 'groups') {
-      if (!this.groups.postingEnabled()) return 'Group posting is OFF, so I cannot schedule group posts. Turn it on with /groups enable. Nothing was prepared.';
+      if (!this.groups.postingEnabled()) return 'Group posting is OFF, so I cannot schedule group posts. Say "turn on group posting" first (I will ask you to confirm). Nothing was prepared.';
       const approved = this.groups.approved();
       if (!approved.length) return 'No groups are approved for marketing yet (/groups). Nothing was prepared.';
       if (approved.length > this.config.maxGroupsPerCampaign) return `You have ${approved.length} approved groups; my per-advert limit is ${this.config.maxGroupsPerCampaign}. Nothing was prepared.`;
@@ -81,7 +81,7 @@ module.exports = {
   scheduleList({ day } = {}) {
     let list = this.schedules.list(['active', 'paused']);
     const g = getPause(this.db, this.clock());
-    const head = g.paused ? 'GLOBAL PAUSE is ON: nothing will post until /resume.\n' : '';
+    const head = g.paused ? 'GLOBAL PAUSE is ON: nothing will post until you say "resume".\n' : '';
     if (day) { const key = isoDate(day === 'today' ? this.clock() : new Date(this.clock().getTime() + 86400000), this.config.timezone); list = list.filter((s) => s.status === 'active' && this.schedules.occursOn(s, key)); }
     if (!list.length) return `${head}No schedules${day ? ` for ${day}` : ''}. Try: "post this property every morning at 8 AM".`;
     return `${head}*Schedules (${list.length})*\n${list.map((s) => this._schedLine(s)).join('\n')}`;
@@ -103,7 +103,7 @@ module.exports = {
   scheduleResume(text) {
     const r = this._resolveSchedules(text, ['paused']);
     const g = getPause(this.db, this.clock()).paused;
-    if (!r.schedules) return `${r.error === 'none' ? 'No paused schedule matches that.' : this._schedErr(r)}${g ? ' (Global pause is still ON: send /resume.)' : ''}`;
+    if (!r.schedules) return `${r.error === 'none' ? 'No paused schedule matches that.' : this._schedErr(r)}${g ? ' (Global pause is still ON: say "resume".)' : ''}`;
     const done = []; const fail = [];
     for (const s of r.schedules) {
       const p = this.properties.get(s.property_id);
@@ -111,7 +111,7 @@ module.exports = {
       if (this.schedules.resume(s.id)) done.push(`S-${s.id}`); else fail.push(`S-${s.id} (no future run)`);
     }
     audit(this.db, 'owner', 'schedule.resume', 'ok', done.join(','));
-    return `${done.length ? `Resumed ${done.join(', ')}. ` : ''}${fail.length ? `Not resumed: ${fail.join('; ')}. ` : ''}${g ? 'Global pause is still ON: send /resume to lift it.' : ''}`.trim();
+    return `${done.length ? `Resumed ${done.join(', ')}. ` : ''}${fail.length ? `Not resumed: ${fail.join('; ')}. ` : ''}${g ? 'Global pause is still ON: say "resume" to lift it.' : ''}`.trim();
   },
   scheduleCancel(text) {
     const r = this._resolveSchedules(text, ['active', 'paused']);

@@ -16,13 +16,13 @@ const backupActions = {
           'This replaces ALL current listings, schedules, drafts, settings and chat memory.',
           'A safety copy of the current data is made first (on a free host it lasts only until the next restart).',
           'Photos and videos are not in backups: restored listings have none until you re-send them.',
-          'Automation will be PAUSED afterwards. Check /schedule, then send /resume.',
+          'Automation will be PAUSED afterwards. Look over your schedules, then say "resume".',
         ],
       };
     },
     async onConfirm(ctx, task) {
       const file = task.payload.file;
-      if (!file || !fs.existsSync(file)) throw new Error('The uploaded backup is no longer available (the service may have restarted). Nothing was changed. Send the file again with the caption /restore.');
+      if (!file || !fs.existsSync(file)) throw new Error('The uploaded backup is no longer available (the service may have restarted). Nothing was changed. Send the file again and write "restore" as the caption.');
       const v = validateSnapshot(file, currentVersion(ctx.db));
       if (!v.ok) throw new Error(`Nothing was changed: ${v.error}.`);
       let safety = null;
@@ -32,7 +32,7 @@ const backupActions = {
       try { fs.unlinkSync(file); } catch { /* ignore */ }
       if (!r.ok) throw new Error(r.error);
       audit(ctx.db, 'owner', 'db.restore', 'ok', `${r.counts.listings} listings`);
-      return `Restored ${r.counts.listings} listing(s) and ${r.counts.schedules} schedule(s). A safety copy of what was here before is at ${path.basename(safety)}. Automation is PAUSED: review /schedule and /properties, then send /resume. Re-send any photos you need.`;
+      return `Restored ${r.counts.listings} listing(s) and ${r.counts.schedules} schedule(s). A safety copy of what was here before is at ${path.basename(safety)}. Automation is PAUSED: look over your schedules and properties, then say "resume". Re-send any photos you need.`;
     },
     async execute() { throw new Error('db_restore runs only via confirmation'); },
   },

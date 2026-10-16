@@ -70,7 +70,7 @@ function loadConfig(env = process.env) {
   const aiFlag = env.AI_ENABLED === undefined || env.AI_ENABLED === '' ? null : String(env.AI_ENABLED).toLowerCase();
   if (aiFlag !== null && !['true', 'false'].includes(aiFlag)) errors.push('AI_ENABLED must be "true" or "false"');
   const aiWanted = aiFlag === null ? true : aiFlag === 'true';
-  const aiTimeout = Number(env.AI_TIMEOUT_MS ?? 20000);
+  const aiTimeout = Number(env.AI_TIMEOUT_MS ?? 40000);
   if (!Number.isFinite(aiTimeout) || aiTimeout < 1000 || aiTimeout > 120000) errors.push('AI_TIMEOUT_MS must be 1000-120000');
   const aiDailyLimit = Number(env.AI_DAILY_REQUEST_LIMIT ?? 300);
   if (!Number.isInteger(aiDailyLimit) || aiDailyLimit < 1 || aiDailyLimit > 100000) errors.push('AI_DAILY_REQUEST_LIMIT must be an integer 1-100000');

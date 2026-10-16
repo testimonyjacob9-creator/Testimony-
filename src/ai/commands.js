@@ -34,13 +34,13 @@ function adViolation(facts, price, text) {
 }
 
 const AI_ERRORS = {
-  AI_AUTH: "My AI helper rejected the Gemini API key, so I could not interpret that. Check GEMINI_API_KEY in the Render environment. Basic commands still work (/help).",
-  AI_MODEL: 'The configured Gemini model name is not recognised. Check GEMINI_MODEL. Basic commands still work (/help).',
+  AI_AUTH: "My AI helper rejected the Gemini API key, so I could not interpret that. Check GEMINI_API_KEY in the Render environment. Listings and reminders still work.",
+  AI_MODEL: 'The configured Gemini model name is not recognised. Check GEMINI_MODEL. Listings and reminders still work.',
   AI_RATE: 'The AI service is rate-limited or out of quota right now, so I did not act on that. Try again in a few minutes; basic commands still work.',
   AI_BUDGET: 'I reached today\'s AI request limit, so I did not act on that. Basic commands still work; the limit resets tomorrow.',
-  AI_TIMEOUT: 'The AI service took too long to answer, so I did nothing. Please try again.',
+  AI_TIMEOUT: 'My AI helper is being slow right now, so I did nothing. Please send that again in a moment.',
 };
-const aiFailText = (e) => AI_ERRORS[e.code] || 'I could not reach my AI helper just now, so I did nothing. Basic commands still work (/help).';
+const aiFailText = (e) => AI_ERRORS[e.code] || 'I could not reach my AI helper just now, so I did nothing. Listings and reminders still work.';
 
 module.exports = {
   // ---------- bounded conversation memory (SQLite) ----------
@@ -198,7 +198,7 @@ module.exports = {
       audit(this.db, 'owner', 'ai.health', h.ok ? 'ok' : (h.code || 'failed'));
       return h.ok ? `AI check passed: Gemini (${h.model}) answered in ${h.latencyMs} ms.` : `AI check FAILED (${h.code}): ${h.message}. Basic commands still work.`;
     }
-    return `AI is configured (Gemini, model ${st.model}). That does not prove it works: send /ai check to test it for real.\nRequests today: ${st.requestsToday}/${st.dailyLimit}${st.lastOk ? `\nLast successful call: ${this._fmt(new Date(st.lastOk))}` : ''}${st.lastError ? `\nLast error: ${st.lastError.code}` : ''}`;
+    return `AI is configured (Gemini, model ${st.model}). That does not prove it works: say "check the AI" to test it for real.\nRequests today: ${st.requestsToday}/${st.dailyLimit}${st.lastOk ? `\nLast successful call: ${this._fmt(new Date(st.lastOk))}` : ''}${st.lastError ? `\nLast error: ${st.lastError.code}` : ''}`;
   },
 };
 module.exports.adViolation = adViolation;

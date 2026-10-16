@@ -5,6 +5,14 @@ const { interpretSchedule } = require('./schedule');
 
 const CONFIRM = /^(yes|y|yep|yeah|yup|confirm(ed)?|ok(ay)?|go ahead|do it|proceed|sure|post it|send it|approve(d)?)[.! ]*$/i;
 const DENY = /^(no|n|nope|nah|discard|abort|never ?mind|forget it|don'?t|do not)[.! ]*$/i;
+// Plain-language ways to say what the slash commands do, so nobody has to remember "/".
+const G_ON = /\b(?:turn|switch)\s+on\s+(?:the\s+)?group\s+(?:posting|sending|messages?)\b|\benable\s+group\s+(?:posting|sending)\b/i;
+const G_OFF = /\b(?:turn|switch)\s+off\s+(?:the\s+)?group\s+(?:posting|sending|messages?)\b|\bdisable\s+group\s+(?:posting|sending)\b/i;
+const CONTACT_SET = /\b(?:my\s+)?(?:contact|phone|whatsapp)(?:\s+(?:number|no\.?))?\s*(?:is|:|=)\s*(\+?\d[\d\s-]{9,16}\d)/i;
+const CONTACT_USE = /\buse\s+(\+?\d[\d\s-]{9,16}\d)\s+as\s+(?:my\s+)?(?:contact|phone)/i;
+const BACKUP = /^\s*(?:please\s+)?(?:(?:make|send|do|give)\s+(?:me\s+)?(?:a\s+)?back[\s-]?up|back[\s-]?up\s+(?:my\s+)?(?:data|everything|business))\b/i;
+const AI_CHECK = /\b(?:check|test)\s+(?:the\s+)?(?:ai|gemini)\b/i;
+const SAVE_THIS = /^\s*save\s+(?:this|it|that)(?:\s+(?:property|item|listing|product|ad))?\s*[.!]?\s*$/i;
 const RESUME = /\b(resume|unpause|start (posting|again)|continue posting)\b/i;
 const PAUSE = /\b(pause|hold off|halt|suspend)\b|\b(stop|don'?t|do not|no)\b.*\b(post|posts|posting|scheduled|automation|anything|everything)\b/i;
 const CANCEL = /^\s*(cancel|discard|delete|remove)\b/i;
@@ -105,6 +113,12 @@ function interpret(text, st) {
   if (P_LIST.test(raw)) return { intent: 'property_list', text: raw };
   if (st.hasActiveProperty && !looksLikeProperty(raw) && raw.length < 90 && /\b(contact|phone|whatsapp|call|number)\b/i.test(raw) && /(?:\+?234[\s-]?|\b0)[789][01]\d[\s-]?\d{3}[\s-]?\d{4}\b/.test(raw)) return { intent: 'property_contact', text: raw };
   if (AUDIENCE.test(raw)) return { intent: 'command', name: 'audience', args: '' };
+  if (G_OFF.test(raw)) return { intent: 'command', name: 'groups', args: 'disable' };
+  if (G_ON.test(raw)) return { intent: 'command', name: 'groups', args: 'enable' };
+  { const c = raw.match(CONTACT_SET) || raw.match(CONTACT_USE); if (c) return { intent: 'command', name: 'contact', args: c[1].replace(/[\s-]/g, '') }; }
+  if (BACKUP.test(raw)) return { intent: 'command', name: 'backup', args: '' };
+  if (AI_CHECK.test(raw)) return { intent: 'command', name: 'ai', args: 'check' };
+  if (SAVE_THIS.test(raw)) return { intent: 'property_saved' };
   if (C_STOP.test(raw)) return { intent: 'campaign_stop' };
   if (ADVERT.test(raw)) { const { head, text } = splitAdvert(raw); return { intent: 'advert', text, numbers: extractNumbers(head.replace(/prop-?\s?\d+/ig, ' ')), raw }; }
   if (G_NEXT.test(raw)) return { intent: 'groups_page', delta: 1 };

@@ -34,7 +34,7 @@ module.exports = {
     const nav = pages > 1 ? `Page ${p}/${pages}. Say "next page" or /groups page ${Math.min(p + 1, pages)}.\n` : '';
     const foot = kind === 'discovery'
       ? `${nav}Authorise with: "select groups 1, 3 and 5". Seeing a group here does NOT authorise marketing to it.`
-      : `${nav}Remove with "remove group 2" or by name. Group posting is ${this.groups.postingEnabled() ? 'ON' : 'OFF (enable with /groups enable)'}.`;
+      : `${nav}Remove with "remove group 2" or by name. Group posting is ${this.groups.postingEnabled() ? 'ON' : 'OFF (say "turn on group posting" to enable)'}.`;
     return `${note}${head}\n${lines.join('\n')}\n${foot}`;
   },
 
@@ -145,7 +145,7 @@ module.exports = {
 
   async proposeAdvert({ text, numbers = [], raw = '' }) {
     if (!this.provider.capabilities().groups) return 'The current WhatsApp provider cannot send to groups, so I did nothing.';
-    if (!this.groups.postingEnabled()) return 'Group posting is OFF, so nothing was prepared for sending. Turn it on with /groups enable (needs your confirmation).';
+    if (!this.groups.postingEnabled()) return 'Group posting is OFF, so nothing was prepared for sending. Say "turn on group posting" first (needs your confirmation).';
     let body = (text || '').trim();
     let prop = null;
     if (!body) {

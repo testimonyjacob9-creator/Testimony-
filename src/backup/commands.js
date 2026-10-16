@@ -15,7 +15,7 @@ module.exports = {
       const res = await this.provider.sendDocument(this.ownerJid, { path: file, fileName: `olives-backup-${stamp}.sqlite`, mimetype: 'application/x-sqlite3', caption: `${this.prefix} Olives backup ${stamp}` });
       if (!res.ok) { audit(this.db, 'owner', 'db.backup', 'failed', res.error || ''); return `I could not send the backup file (${res.error || 'unknown error'}). Nothing was backed up.`; }
       audit(this.db, 'owner', 'db.backup', 'ok', '');
-      return 'Backup sent above. Keep that file somewhere safe: it holds your listings, schedules, settings and chat memory. It does NOT include photos/videos or the WhatsApp login. To restore it later, send the file back with the caption /restore.';
+      return 'Backup sent above. Keep that file somewhere safe: it holds your listings, schedules, settings and chat memory. It does NOT include photos/videos or the WhatsApp login. To restore it later, send the file back and write "restore" as the caption.';
     } finally { try { fs.unlinkSync(file); } catch { /* ignore */ } }
   },
 

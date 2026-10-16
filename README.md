@@ -46,7 +46,7 @@ Requires Node >= 22.13 (uses built-in `node:sqlite`, no native build needed).
 | AI_PROVIDER | no | gemini | only `gemini` |
 | GEMINI_API_KEY | for AI | - | secret: .env (ignored) or Render dashboard only |
 | GEMINI_MODEL | no | gemini-3.8-flash | any supported Gemini model id |
-| AI_DAILY_REQUEST_LIMIT / AI_TIMEOUT_MS | no | 300 / 20000 | spend safety cap / per-call timeout |
+| AI_DAILY_REQUEST_LIMIT / AI_TIMEOUT_MS | no | 300 / 40000 | spend safety cap / per-call timeout |
 | DASHBOARD_ENABLED / DASHBOARD_TOKEN | no | false | Phase 8 dashboard; token 16+ chars if enabled |
 
 ## Documentation

@@ -53,8 +53,8 @@ module.exports = {
   _defaultContact() { const c = getSetting(this.db, 'default_contact'); return c && c.number ? c.number : null; },
   contactCommand(args) {
     const m = String(args || '').match(PHONE);
-    if (!String(args || '').trim()) { const c = this._defaultContact(); return c ? `Your saved contact number is ${c}. It is added to new items and properties that do not state one. Change it with /contact <number>.` : 'No contact number is saved. Send /contact 08012345678 once and I will add it to new items and properties.'; }
-    if (!m) return 'That does not look like a Nigerian phone number. Example: /contact 08012345678. Nothing was changed.';
+    if (!String(args || '').trim()) { const c = this._defaultContact(); return c ? `Your saved contact number is ${c}. It is added to new items and properties that do not state one. Say "my contact number is ..." to change it.` : 'No contact number is saved. Tell me once, e.g. "my contact number is 0801 234 5678" (use your own number), and I will add it to new items and properties.'; }
+    if (!m) return 'That does not look like a Nigerian phone number. Example: "my contact number is 0801 234 5678". Nothing was changed.';
     const number = `0${m[1]}${m[2]}${m[3]}`;
     setSetting(this.db, 'default_contact', { number, at: this.clock().toISOString() });
     audit(this.db, 'owner', 'contact.default', 'ok');
@@ -121,7 +121,7 @@ module.exports = {
   async _handleMedia(msg) {
     const media = msg.media;
     const reply = (t) => this._send(msg.chat, `${this.prefix} ${t}`);
-    if (media.type === 'document' && /^\/restore\b/i.test((msg.text || '').trim())) return this.backupRestoreUpload(msg, reply);
+    if (media.type === 'document' && /^\/?restore\b/i.test((msg.text || '').trim())) return this.backupRestoreUpload(msg, reply);
     if (!['image', 'video'].includes(media.type)) { await reply(`I can only store photos and videos for listings (not ${media.type}s yet). Nothing was saved.`); return { handled: true }; }
     const v = this.media.validate(media.mime, media.size);
     if (!v.ok) { await reply(`I did not save that file: ${v.error}.`); return { handled: true }; }
@@ -159,7 +159,7 @@ module.exports = {
       if (rows.length) {
         const noPrice = rows.filter((p) => !p.price).map((p) => p.ref); const noContact = rows.some((p) => !p.contact);
         const lines = rows.map((p) => `${p.ref} | ${p.title} | ${p.price ? naira(p.price) : 'price?'} | ${this.media.counts(p.id).images} photo(s), ${this.media.counts(p.id).videos} video(s)`);
-        await this._send(itemEntries[0][1].chat, `${this.prefix} Saved ${rows.length} item(s) as DRAFTS (not posted anywhere):\n${lines.join('\n')}${noPrice.length ? `\nNo price found for: ${noPrice.join(', ')}. Add one like "Change the price of ${noPrice[0]} to ₦15,000", or put it in the caption (e.g. ₦15,000).` : ''}${noContact ? '\nNo contact number on some items: send /contact 08012345678 once, then new items will use it.' : ''}\nSay *done* to make all of these available, then "post these on my status now".`);
+        await this._send(itemEntries[0][1].chat, `${this.prefix} Saved ${rows.length} item(s) as DRAFTS (not posted anywhere):\n${lines.join('\n')}${noPrice.length ? `\nNo price found for: ${noPrice.join(', ')}. Add one like "Change the price of ${noPrice[0]} to ₦15,000", or put it in the caption (e.g. ₦15,000).` : ''}${noContact ? '\nNo contact number on some items: tell me your contact number once (e.g. "my contact number is 0801 234 5678"; use your own), then new items will use it.' : ''}\nSay *done* to make all of these available, then "post these on my status now".`);
       }
     }
     for (const [id, acc] of entries.filter(([, a]) => !a.item)) {

@@ -20,28 +20,23 @@ const PREFIX = '🤖';
 const STALE_MS = 10 * 60 * 1000;
 const AWAIT_TTL_MS = 10 * 60 * 1000;
 
-const HELP = `${PREFIX} *Commands*
-/status - connection and automation state
-/tasks - open tasks and drafts awaiting approval
-/cancel - discard the current draft (/cancel T-5, /cancel all)
-/pause [for 2 hours | until tomorrow] - pause scheduled automation
-/resume - resume automation
-/groups - list your groups (+ select, selected, remove, clear, enable, disable)
-/schedule - recurring posts (list, pause, resume, cancel, history) | /routine - morning briefing
-/audience - who can receive your Status posts
-/contact <number> - save your contact number for new items
-/properties, /property PROP-001, /caption PROP-001 - your saved listings (send a description + photos to add one)
-/advert <text> - draft an advert for your approved groups (needs your yes)
-/backup - send me a copy of your data (send it back with /restore to restore)
-/briefing - business update | /ai - AI helper status (/ai check tests it)
-
-*You can also just type*, e.g.
-"Remind me to call the buyer at 4 PM"
-"Post this property every morning at 8 AM"
-"Show me tomorrow's tasks"
-"Don't post anything today"
+const HELP = `${PREFIX} *What I can do*
+Just tell me in your own words. For example:
+\"Remind me to call the buyer at 4 PM\"
+\"Post this property every morning at 8 AM\"
+\"Show me tomorrow's tasks\"
+\"Don't post anything today\" / \"resume\"
+\"Change the price of PROP-001 to 70k\"
+\"My contact number is 0801 234 5678\"
+\"Turn on group posting\" / \"Show my groups\"
+\"Send PROP-001 to my approved groups\"
+\"Back up my data\" / \"Check the AI\"
+To add an item: send its photo with a short description.
 
 Every action is drafted first. Nothing runs until you reply *yes*.
+
+*Shortcuts (optional)*: /status /tasks /groups /schedule /properties /backup /briefing /help
+(also /pause /resume /cancel /audience /contact /advert /ai)
 Coming later: leads and follow-ups.`;
 
 /** Provider-independent command layer. Depends only on the WhatsAppProvider interface. */
@@ -83,7 +78,7 @@ class Assistant {
       const p = getPause(this.db, this.clock());
       const warn = this.interrupted ? ` WARNING: ${this.interrupted} group send(s) were interrupted by the restart and their outcome is unknown (see /advert status).` : '';
       const warn2 = this.interruptedRuns ? ` WARNING: ${this.interruptedRuns} scheduled run(s) were interrupted by the restart; their outcome is unknown, please check your Status (/schedule history).` : '';
-      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}.${warn}${warn2} Send /help.`;
+      const text = `${PREFIX} Assistant online. ${open} open task${open === 1 ? '' : 's'} restored${p.paused ? '; automation is PAUSED' : ''}.${warn}${warn2} Say "help" to see what I can do.`;
       this._send(this.ownerJid, text).catch(() => {});
     }
   }
@@ -176,6 +171,7 @@ class Assistant {
       case 'campaign_retarget': return this.retargetCampaign(it, proposal);
       case 'campaign_stop': return this.stopCampaign(proposal);
       case 'property_done': return this.propertyDone();
+      case 'property_saved': { const p = this._activeProperty(); return p ? `${p.ref} is already saved as a draft. Say "done" to make it available, or send more details or photos.` : 'I save details and photos as drafts as soon as you send them. Send the item, then say "done" when it is ready.'; }
       case 'property_contact': return this.propertyAddContact(it.text);
       case 'property_list': return this.propertyList(parseFilters(it.text));
       case 'property_show': { const r = this._resolveProperty(it.text); return r.property ? this.propertyShow(r.property) : this._refError(r); }
@@ -205,7 +201,7 @@ class Assistant {
           setSetting(this.db, 'candidate_content', { text, at: now.toISOString() });
           return `I didn't recognise that as a command, so I did nothing. I kept it for 30 min in case it is an advert: say "send this to my approved groups" and I'll prepare a draft (nothing is sent without your confirmation).`;
         }
-        return `I didn't understand that, so I did nothing. Try "Remind me to ... at 4 PM", /tasks, or /help.`;
+        return `I didn't understand that, so I did nothing. Try "Remind me to ... at 4 PM", or say "help".`;
       }
     }
   }
@@ -231,7 +227,7 @@ class Assistant {
       case 'briefing': return this.businessBriefing(now);
       case 'ai': return this.aiCommand(args);
       case 'settings': return 'Settings arrive in a later phase. Current: timezone ' + this.config.timezone + '.';
-      default: return `Unknown command /${name}. Send /help.`;
+      default: return `Unknown command /${name}. Say "help" to see what I can do.`;
     }
   }
 
@@ -363,8 +359,8 @@ Uptime: ${Math.floor(up / 60)}h ${up % 60}m
 Group posting: ${this.groups.postingEnabled() ? 'ON' : 'OFF'} (${this.groups.approved().length} approved group(s))
 Properties: ${this.properties.list({}).length} saved
 Schedules: ${this.schedules.list(['active']).length} active, ${this.schedules.list(['paused']).length} paused
-AI helper: ${this.ai && this.ai.enabled ? 'configured (/ai check to test)' : 'OFF'}
-Storage: ${this.config.ephemeralOk ? 'TEMPORARY: data and WhatsApp login are lost when the host restarts (use /backup regularly)' : 'persistent'}
+AI helper: ${this.ai && this.ai.enabled ? 'configured (say "check the AI" to test it)' : 'OFF'}
+Storage: ${this.config.ephemeralOk ? 'TEMPORARY: data and WhatsApp login are lost when the host restarts (say "back up my data" regularly)' : 'persistent'}
 Not built yet: leads and follow-ups`;
   }
 }
